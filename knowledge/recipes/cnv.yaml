@@ -1,0 +1,215 @@
+# Example fleet PromQL recipes for Telemeter (seeded with CNV/virt metrics).
+# Join patterns are reusable for any domain — copy and swap the metric, or
+# add knowledge/recipes/<domain>.yaml.
+# Templates use placeholders only — never hardcode customer identifiers.
+#
+# Placeholders:
+#   {scope_join}           — subscribed filter for external/internal/all
+#                            (all = subscribed without internal= label)
+#   {subscribed_selector}  — subscribed metric selector for the scope (never empty)
+#   {filters}              — optional ebs_account / email_domain / _id filters
+#
+# Prefer PromQL `and on (_id)` for presence filters and
+# `* on (_id) group_left(labels)` with `group by` for label joins.
+# See knowledge/join_patterns.md.
+recipes:
+  - id: total_running_vms
+    title: Total running VMs
+    description: Sum of running VMI counts across clusters in scope.
+    topics: [cnv, vms, fleet]
+    promql: sum(cnv:vmi_status_running:count {scope_join} {filters})
+
+  - id: clusters_with_running_vms
+    title: Clusters with running VMs
+    description: Count of clusters that have at least one running VMI.
+    topics: [cnv, vms, clusters]
+    promql: >
+      count(count by (_id) (cnv:vmi_status_running:count)
+      {scope_join} {filters})
+
+  - id: clusters_with_cnv_installed
+    title: Clusters with CNV installed
+    description: >
+      Count of clusters with a succeeded hyperconverged CSV
+      (OpenShift Virtualization / CNV installed).
+    topics: [cnv, install, clusters]
+    promql: >
+      count(group by (_id) (csv_succeeded{name=~".*hyperconverged.*"})
+      {scope_join} {filters})
+
+  - id: accounts_with_cnv_installed
+    title: Accounts with CNV installed
+    description: >
+      Count of distinct ebs_account values with a succeeded hyperconverged CSV
+      (scope defaults to external via {scope_join}).
+    topics: [cnv, install, accounts]
+    promql: >
+      count(count by (ebs_account)(
+      (csv_succeeded{name=~".*hyperconverged.*"}
+      * on (_id) group_left(ebs_account)
+      group by (_id, ebs_account) (topk by (_id) (1, ocm_subscription{})))
+      {scope_join} {filters}))
+
+  - id: accounts_with_more_than_10_running_vms
+    title: Accounts with more than 10 running VMs
+    description: Count of accounts whose summed running VMIs exceed 10.
+    topics: [cnv, vms, accounts]
+    promql: >
+      count((sum by (ebs_account)(
+      (cnv:vmi_status_running:count {scope_join} {filters})
+      * on (_id) group_left(ebs_account)
+      group by (_id, ebs_account) (topk by (_id) (1, ocm_subscription{}))
+      ))>10)
+
+  - id: accounts_with_more_than_100_running_vms
+    title: Accounts with more than 100 running VMs
+    description: Count of accounts whose summed running VMIs exceed 100.
+    topics: [cnv, vms, accounts]
+    promql: >
+      count((sum by (ebs_account)(
+      (cnv:vmi_status_running:count {scope_join} {filters})
+      * on (_id) group_left(ebs_account)
+      group by (_id, ebs_account) (topk by (_id) (1, ocm_subscription{}))
+      ))>100)
+
+  - id: accounts_with_more_than_1000_running_vms
+    title: Accounts with more than 1000 running VMs
+    description: Count of accounts whose summed running VMIs exceed 1000.
+    topics: [cnv, vms, accounts]
+    promql: >
+      count((sum by (ebs_account)(
+      (cnv:vmi_status_running:count {scope_join} {filters})
+      * on (_id) group_left(ebs_account)
+      group by (_id, ebs_account) (topk by (_id) (1, ocm_subscription{}))
+      ))>1000)
+
+  - id: median_vms_per_cluster
+    title: Median VMs per cluster
+    description: >
+      Median (p50) of virtualmachines.kubevirt.io resource counts per cluster
+      (clusters with count > 0) in the selected scope.
+    topics: [cnv, vms, percentiles]
+    promql: >
+      quantile(0.50,
+      (cluster:usage:resources:sum{resource="virtualmachines.kubevirt.io"}
+      {scope_join} {filters}) > 0)
+
+  - id: p75_vms_per_cluster
+    title: 75th percentile VMs per cluster
+    description: >
+      p75 of VM resource counts per cluster in the selected scope (count > 0).
+    topics: [cnv, vms, percentiles]
+    promql: >
+      quantile(0.75,
+      (cluster:usage:resources:sum{resource="virtualmachines.kubevirt.io"}
+      {scope_join} {filters}) > 0)
+
+  - id: p90_vms_per_cluster
+    title: 90th percentile VMs per cluster
+    description: >
+      p90 of VM resource counts per cluster in the selected scope (count > 0).
+    topics: [cnv, vms, percentiles]
+    promql: >
+      quantile(0.90,
+      (cluster:usage:resources:sum{resource="virtualmachines.kubevirt.io"}
+      {scope_join} {filters}) > 0)
+
+  - id: cpu_capacity_clusters_with_vms
+    title: CPU capacity of clusters with running VMs
+    description: Sum of cluster CPU capacity for clusters that have running VMIs.
+    topics: [cnv, cpu, capacity]
+    promql: >
+      sum(cluster:capacity_cpu_cores:sum
+      {scope_join}
+      and on (_id) group by (_id) (cnv:vmi_status_running:count)
+      {filters})
+
+  - id: cpu_capacity_all_clusters
+    title: CPU capacity of all clusters in scope
+    description: Sum of cluster CPU capacity for subscribed clusters in scope.
+    topics: [cpu, capacity]
+    promql: sum(cluster:capacity_cpu_cores:sum {scope_join} {filters})
+
+  - id: percent_clusters_with_vms
+    title: Percent of clusters with running VMs
+    description: >
+      Percentage of subscribed clusters in scope that have running VMIs.
+      Numerator and denominator both honor scope (and optional filters).
+    topics: [cnv, vms, clusters]
+    promql: >
+      count(group by (_id) (cnv:vmi_status_running:count)
+      {scope_join} {filters})
+      /
+      count(group by (_id) ({subscribed_selector}) {filters})
+      * 100
+
+  - id: bm_host_type_clusters_total
+    title: BM host_type clusters
+    description: >
+      Count of clusters with id_primary_host_type host_type=metal (BM),
+      scoped to subscribed clusters.
+    topics: [cnv, baremetal, host_type]
+    promql: >
+      count(count by (_id) (id_primary_host_type{host_type="metal"})
+      {scope_join} {filters})
+
+  - id: bm_host_type_clusters_with_vms
+    title: BM host_type clusters with VMs
+    description: BM (host_type=metal) clusters that also have running VMIs.
+    topics: [cnv, baremetal, vms]
+    promql: >
+      count(count by (_id) (
+      group by (_id) (cnv:vmi_status_running:count)
+      and on (_id) group by (_id) (id_primary_host_type{host_type="metal"})
+      {scope_join} {filters}))
+
+  - id: baremetal_provider_clusters_total
+    title: BareMetal infrastructure provider clusters
+    description: >
+      Clusters with cluster_infrastructure_provider type=BareMetal
+      (distinct from host_type=metal).
+    topics: [cnv, baremetal, infrastructure]
+    promql: >
+      count(count by (_id) (cluster_infrastructure_provider{type="BareMetal"})
+      {scope_join} {filters})
+
+  - id: baremetal_provider_clusters_with_vms
+    title: BareMetal provider clusters with VMs
+    description: BareMetal infrastructure clusters that have running VMIs.
+    topics: [cnv, baremetal, vms]
+    promql: >
+      count(count by (_id) (
+      group by (_id) (cnv:vmi_status_running:count)
+      and on (_id) group by (_id) (cluster_infrastructure_provider{type="BareMetal"})
+      {scope_join} {filters}))
+
+  - id: clusters_with_cnv_and_odf
+    title: Clusters with CNV and ODF
+    description: Clusters with both hyperconverged and ocs-operator CSVs succeeded.
+    topics: [cnv, odf, install]
+    promql: >
+      count(count by (_id) (csv_succeeded{name=~".*hyperconverged.*"})
+      and on (_id) group by (_id) (csv_succeeded{name=~".*ocs-operator.*"})
+      {scope_join} {filters})
+
+  - id: clusters_with_cnv_and_oadp
+    title: Clusters with CNV and OADP
+    description: Clusters with both hyperconverged and oadp CSVs succeeded.
+    topics: [cnv, oadp, install]
+    promql: >
+      count(count by (_id) (csv_succeeded{name=~".*hyperconverged.*"})
+      and on (_id) group by (_id) (csv_succeeded{name=~".*oadp.*"})
+      {scope_join} {filters})
+
+  - id: running_vms_by_account
+    title: Running VMs by account
+    description: >
+      Sum running VMIs by ebs_account and email_domain. Use with filters for a
+      single account, or max_series to limit fleet table size.
+    topics: [cnv, vms, accounts]
+    promql: >
+      sort_desc(sum by (ebs_account, email_domain) (
+      (cnv:vmi_status_running:count {scope_join} {filters})
+      * on (_id) group_left(email_domain, ebs_account)
+      group by (_id, ebs_account, email_domain) (topk by (_id) (1, ocm_subscription{}))
+      ))

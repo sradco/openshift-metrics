@@ -1,0 +1,10 @@
+# Approvers for openshift-metrics (MCP + catalog + recipes).
+#
+# Support split:
+# - RHOBS Telemeter service accounts / SSO access → Slack #rhobs-support
+# - This repository (MCP bugs, recipes, docs, allowlist sync) → OWNERS below
+
+approvers:
+  - sradco
+reviewers:
+  - sradco
