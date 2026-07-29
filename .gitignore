@@ -1,0 +1,45 @@
+# Secrets and local env
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+*token*
+*secret*
+
+# Query / report outputs (may contain customer data)
+*.csv
+*.html
+out/
+output/
+results/
+tmp/
+.cache/
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.egg-info/
+.eggs/
+dist/
+build/
+.venv/
+venv/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+
+# IDE / OS
+.idea/
+.vscode/
+*.swp
+.DS_Store
+
+# Re-include project Cursor skill (global ignores may exclude .cursor/)
+!.cursor/
+!.cursor/skills/
+!.cursor/skills/openshift-metrics/
+!.cursor/skills/openshift-metrics/SKILL.md

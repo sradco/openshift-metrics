@@ -1,0 +1,7 @@
+{
+  "mcpServers": {
+    "openshift-metrics": {
+      "command": "/ABS/PATH/TO/openshift-metrics/scripts/run_mcp.sh"
+    }
+  }
+}

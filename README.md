@@ -1,99 +1,249 @@
-# OpenShift Metrics Documentation
+# OpenShift Metrics
 
-This repository provides a centralized documentation source for OpenShift and its operators Prometheus metrics.
-It includes metadata for metrics such as descriptions, labels, and types.
+Centralized documentation for OpenShift Prometheus metrics, plus an MCP
+server for catalog lookup and optional live **Telemetry (Telemeter)** queries
+from Cursor or Claude Code.
 
-The repository also provides a script to automatically fetch and update the list of Prometheus metrics and their associated labels from OpenShift clusters.
+**Home:** [rhobs/openshift-metrics](https://github.com/rhobs/openshift-metrics)
+(**private** RHOBS org repo — request GitHub access if you cannot clone).
+
+**Honest scope:** `knowledge/recipes/cnv.yaml` is an **example fleet recipe
+pack** (many entries use Virtualization metrics). The join patterns are
+reusable for any team — copy, swap the metric, or add
+`knowledge/recipes/<domain>.yaml`. See
+[docs/KNOWN_LIMITATIONS.md](docs/KNOWN_LIMITATIONS.md).
+
+## Before you start
+
+1. GitHub access to `rhobs/openshift-metrics` (private).
+2. Python 3.10+.
+3. For live Telemeter: `PROM_URL` plus RHOBS SA (`CLIENTID` / `CLIENTSECRET`)
+   via Slack [#rhobs-support](https://redhat.enterprise.slack.com/archives/C052XEAU63E)
+   (credentials only — MCP/recipe bugs → [OWNERS](OWNERS)).
+
+## Two catalogs (important)
+
+| Catalog | Path | Meaning |
+|---------|------|---------|
+| General metrics | `docs/prometheus_metrics/` | Partial/historical cluster metrics. **Not all are telemetered.** Optional for MCP Telemeter use. |
+| Telemetry allowlist | `docs/telemetry/allowlist.yaml` | What Telemeter forwards (from [CMO](https://github.com/openshift/cluster-monitoring-operator/blob/main/Documentation/data-collection.md)). |
+
+## Privacy and data handling
+
+This repo may be private on GitHub, but **Telemeter results are still
+customer-sensitive**.
+
+**Never commit:**
+
+- `CLIENTID` / `CLIENTSECRET` / tokens
+- Real `ebs_account`, `email_domain`, or cluster `_id` values
+- CSV/HTML reports or query result dumps
+
+**Also never** paste those into public Slack, Jira, or GitHub. Cursor/Claude
+**chat transcripts retain tool output** — treat chats that ran Telemeter
+queries as sensitive.
+
+Use `.env` locally (gitignored). See `.env.example`.
 
 ## Features
 
-- **Centralized Documentation**: Stores Prometheus metrics and their metadata (descriptions, labels, types) in organized YAML files.
-- **Automated Updates**: A Python script that can be run against OpenShift clusters to fetch new metrics and update existing ones.
-- **Custom Label Descriptions**: Allows updating label descriptions using an input YAML file for improved clarity and consistency.
-
-# Getting Started
-
-## Prerequisites
-
-- Python 3.7 or later.
-- Access to an OpenShift cluster with Prometheus monitoring enabled.
-- A valid token for accessing the Prometheus endpoint.
+- General Prometheus metrics metadata (YAML, partial)
+- Telemetry allowlist sync from CMO (+ CI drift check)
+- Example fleet PromQL recipes (`knowledge/recipes/cnv.yaml`; patterns reusable)
+- MCP server for Cursor / Claude Code
+- Optional script to refresh general metrics from a cluster Prometheus
 
 ## Installation
 
-### Clone this repository:
-
 ```bash
-git clone https://github.com/your-username/openshift-metrics.git
-```
-```bash
+git clone https://github.com/rhobs/openshift-metrics.git
 cd openshift-metrics
+python3 -m venv .venv
+source .venv/bin/activate
+pip install -r requirements.txt
+cp .env.example .env   # fill CLIENTID/CLIENTSECRET for live queries
 ```
 
-### Install the required dependencies:
+For development tests: `pip install -r requirements-dev.txt`.
+
+## Sync Telemetry allowlist
+
+The committed `docs/telemetry/allowlist.yaml` is a normalized snapshot of
+the CMO telemeter ConfigMap (not a git submodule). Refresh it when CMO
+changes:
 
 ```bash
-pip install requests>=2.25.0 pyyaml>=5.4 urllib3>=1.26
-```
-## Running the Script
-
-### Prepare the Input File:
-Place the label_descriptions.yaml file in the data/ directory. It should follow this format:
-
-```yaml
-- label_name: endpoint
-  label_description: The specific endpoint of the service or application being monitored.
-- label_name: namespace
-  label_description: The Kubernetes namespace in which the pod or service resides.
+python src/sync_telemetry_allowlist.py
+# or from a local CMO manifest:
+python src/sync_telemetry_allowlist.py --source-file /path/to/config.yaml
 ```
 
-### Run the Script:
-
-Execute the Python script to fetch and update metrics documentation:
+Detect drift without writing (also run in CI):
 
 ```bash
-python src/fetch_metrics.py --token YOUR_PROMETHEUS_TOKEN
+python src/sync_telemetry_allowlist.py --check
 ```
 
-## Output:
+If `--check` fails, re-run the sync command and commit the updated
+`docs/telemetry/allowlist.yaml`.
 
-The updated metrics documentation will be saved in the docs/prometheus_metrics/ directory. Each YAML file corresponds to a group of metrics organized by their prefix, such as:
+## MCP server (Cursor / Claude Code) — easy setup
+
+Other users only need **three steps**:
+
+### 1. Clone and credentials
 
 ```bash
-docs/prometheus_metrics/
-├── controller_metrics.yaml
-├── kube_metrics.yaml
-└── network_metrics.yaml
+git clone https://github.com/rhobs/openshift-metrics.git
+cd openshift-metrics
+
+# Option A (repo-local, gitignored):
+umask 077
+cat > .env <<'EOF'
+PROM_URL=https://YOUR-TELEMETER-API-BASE/
+CLIENTID=your-client-id
+CLIENTSECRET=your-client-secret
+EOF
+
+# Option B (shared machine / no secrets in checkout):
+mkdir -p ~/.config/openshift-metrics
+umask 077
+cat > ~/.config/openshift-metrics/env <<'EOF'
+PROM_URL=https://YOUR-TELEMETER-API-BASE/
+CLIENTID=your-client-id
+CLIENTSECRET=your-client-secret
+EOF
 ```
 
-**Note:** It is possible to manually update the metrics and labels descriptions directly in the file under `docs/prometheus_metrics`.
+Catalog tools work without credentials. Live Telemeter needs `PROM_URL`
+(ask `#rhobs-support`) plus the SA credentials. Do not commit real API
+endpoints. Precedence in `run_mcp.sh`: already-exported env >
+repo `.env` > `~/.config/openshift-metrics/env`.
 
-## Debugging
-The script provides debug messages for:
+### 2. Point Cursor / Claude Code at the launcher
 
-- Labels that are newly added.
-- Labels whose descriptions are updated based on the label_descriptions.yaml input file.
+Copy `mcp.json.example` into your Cursor MCP config (user or project) and
+replace the path:
+
+```json
+{
+  "mcpServers": {
+    "openshift-metrics": {
+      "command": "/ABS/PATH/TO/openshift-metrics/scripts/run_mcp.sh"
+    }
+  }
+}
+```
+
+`scripts/run_mcp.sh` handles venv creation, dependency refresh when
+`requirements.txt` changes, `PYTHONPATH`, and loading `.env` /
+`~/.config/openshift-metrics/env`. No secrets in JSON.
+
+### 3. Restart MCP and ask
+
+Reload Cursor MCP (or the window), then ask e.g. “How many external running
+VMs?” or “Is `cnv:vmi_status_running:count` in Telemetry?”
+
+### Updating to the latest MCP
+
+Cursor does not pull this repo for you. Your MCP config only points at a
+local checkout. To get server, recipe, allowlist, and instruction updates:
+
+```bash
+cd /ABS/PATH/TO/openshift-metrics
+git pull
+```
+
+Then **restart the openshift-metrics MCP** (or reload the Cursor window).
+
+- Code, recipes, allowlist, and agent guidance load from the checkout on
+  the next MCP start.
+- If `requirements.txt` changed, `scripts/run_mcp.sh` reinstalls deps
+  automatically (stamp under `.venv/`).
+- You usually do **not** need to edit your Cursor MCP JSON unless
+  `mcp.json.example` gains new fields (rare).
+
+### Manual run (optional)
+
+```bash
+./scripts/run_mcp.sh
+```
+
+### MCP tools
+
+| Tool | Purpose |
+|------|---------|
+| `search_metrics` | Search general catalog (+ Telemetry flag) |
+| `list_telemetry_metrics` | Allowlist search |
+| `is_telemetry_metric` | Membership check |
+| `describe_metric` | Merge catalog + allowlist metadata |
+| `list_recipes` / `run_recipe` | Named fleet PromQL (example pack + future packs) |
+| `query_telemeter` | Raw PromQL |
+| `telemeter_auth_status` | Credential/token check (no secrets echoed) |
+
+`search_metrics` / `describe_metric` read **committed catalog YAML**
+(metric and label descriptions when present). They do not auto-probe live
+Telemeter label values. Use `query_telemeter` only when you need live data.
+
+`run_recipe` and `query_telemeter` always return `query_used` (the PromQL
+executed). Agents should include that query in user-facing answers.
+
+Before every Telemeter call, PromQL **guardrails** (adapted from
+[rhobs/obs-mcp](https://github.com/rhobs/obs-mcp)) reject blanket regex,
+unrestricted selectors, and enforce a query rate limit. See
+`docs/KNOWN_LIMITATIONS.md` and `.env.example` (`TELEMETER_GUARDRAILS`).
+
+Project agent guidance: `AGENTS.md` and `.cursor/skills/openshift-metrics/SKILL.md`.
+
+## Refresh general metrics from a cluster
+
+Optional and **not required** for Telemeter MCP use. Pass your own cluster
+Prometheus URL (no default is embedded in the repo):
+
+```bash
+python src/main.py --token YOUR_PROMETHEUS_TOKEN \
+  --prometheus-url https://prometheus.example.invalid
+# or: export PROMETHEUS_URL=...
+```
+
+See `data/label_descriptions.yaml` for label description overrides.
+
+## Tests
+
+```bash
+pip install -r requirements-dev.txt
+PYTHONPATH=src pytest tests/
+python src/sync_telemetry_allowlist.py --check
+# Optional live Telemeter (needs credentials):
+PYTHONPATH=src python scripts/smoke_test_mcp.py
+```
+
+CI runs unit tests and allowlist `--check` on pull requests
+(`.github/workflows/ci.yml`).
+
+## Join patterns & recipes
+
+- `knowledge/join_patterns.md` — Telemeter `_id` join idioms
+- `knowledge/recipes/cnv.yaml` — example fleet recipes (virt-seeded; reusable patterns)
+- Add more packs as `knowledge/recipes/<domain>.yaml`
+
+## Support
+
+| Topic | Where |
+|-------|--------|
+| RHOBS SA / Telemeter access | Slack `#rhobs-support` |
+| MCP, recipes, docs, allowlist | [OWNERS](OWNERS) / GitHub issues on this repo |
+| Known gaps | [docs/KNOWN_LIMITATIONS.md](docs/KNOWN_LIMITATIONS.md) |
 
 ## Contributing
-We welcome contributions to improve the documentation or the script. Follow these steps to contribute:
 
-1. Fork the repository.
-2. Create a new branch:
-
-```bash
-git checkout -b feature-name
-```
-
-3. Commit your changes and push the branch:
-
-```bash
-git push origin feature-name
-```
-
-4. Open a pull request.
+1. Do not commit secrets or customer data (see Privacy above).
+2. Prefer PRs against `rhobs/openshift-metrics`.
+3. Keep Telemetry allowlist updates via `sync_telemetry_allowlist.py`
+   (CI fails on `--check` when the snapshot is stale).
+4. New recipe packs: add YAML under `knowledge/recipes/` and tests for
+   scope rendering.
 
 ## License
-This project is licensed under the Apache License.
 
-## Contact
-For issues or questions, feel free to open an issue.
+Apache License 2.0.
