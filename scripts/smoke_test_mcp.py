@@ -3,7 +3,7 @@
 
 Usage:
   source .venv/bin/activate
-  export CLIENTID=... CLIENTSECRET=...   # optional, for live queries
+  # Live Telemeter needs PROM_URL + CLIENTID + CLIENTSECRET in .env
   PYTHONPATH=src python scripts/smoke_test_mcp.py
 """
 
@@ -36,6 +36,8 @@ async def check_tool_registration() -> None:
         "describe_metric",
         "list_recipes",
         "run_recipe",
+        "render_scoped_promql",
+        "query_scoped_metric",
         "query_telemeter",
         "telemeter_auth_status",
     }
@@ -46,56 +48,81 @@ async def check_tool_registration() -> None:
 
 
 def check_catalog() -> None:
-    vmi = catalog.is_telemetry_metric("cnv:vmi_status_running:count")
-    print("is_telemetry_metric(cnv:vmi_status_running:count):", vmi["in_telemetry"])
-    if not vmi["in_telemetry"]:
-        raise SystemExit("expected cnv:vmi_status_running:count in allowlist")
+    metric = "cluster:capacity_cpu_cores:sum"
+    hit = catalog.is_telemetry_metric(metric)
+    print(f"is_telemetry_metric({metric}):", hit["in_telemetry"])
+    if not hit["in_telemetry"]:
+        raise SystemExit(f"expected {metric} in allowlist")
 
     fake = catalog.is_telemetry_metric("not_a_real_telemetry_metric_zzz")
     print("is_telemetry_metric(fake):", fake["in_telemetry"])
 
-    hits = catalog.search_metrics("cnv", limit=5)
-    print(f"search_metrics('cnv') hits: {len(hits)}")
+    hits = catalog.search_metrics("capacity_cpu", limit=5)
+    print(f"search_metrics('capacity_cpu') hits: {len(hits)}")
     for h in hits[:3]:
         print(f"  - {h['metric_name']} in_telemetry={h['in_telemetry']}")
 
-    desc = catalog.describe_metric("cnv_abnormal")
-    print("describe_metric(cnv_abnormal).in_telemetry:", desc["in_telemetry"])
+    desc = catalog.describe_metric(metric)
+    print(f"describe_metric({metric}).in_telemetry:", desc["in_telemetry"])
 
     info = catalog.allowlist_source_info()
     print(f"allowlist matches: {info['match_count']}")
 
 
 def check_recipes() -> None:
-    listed = recipes.list_recipes(topic="cnv")
-    print(f"cnv recipes: {len(listed)}")
-    rendered = recipes.render_recipe_promql("total_running_vms", scope="external")
-    print("total_running_vms promql:")
+    listed = recipes.list_recipes(topic="fleet")
+    print(f"fleet recipes: {len(listed)}")
+    rendered = recipes.render_recipe_promql(
+        "subscribed_clusters_count", scope="external"
+    )
+    print("subscribed_clusters_count promql:")
     print(" ", rendered["promql"])
-    if "and on (_id)" not in rendered["promql"]:
-        raise SystemExit("recipe did not use preferred and on (_id) join")
+    if "cluster_subscribed" not in rendered["promql"]:
+        raise SystemExit("fleet recipe did not use cluster_subscribed")
+
+    scoped = recipes.render_scoped_promql(
+        "cluster:capacity_cpu_cores:sum",
+        aggregation="sum",
+        scope="external",
+    )
+    print("render_scoped_promql(capacity cpu) promql:")
+    print(" ", scoped["promql"])
+    if "cluster:capacity_cpu_cores:sum" not in scoped["promql"]:
+        raise SystemExit("scoped promql missing metric")
+    if "and on (_id)" not in scoped["promql"]:
+        raise SystemExit("scoped promql missing scope join")
 
 
 def check_telemeter() -> None:
     status = telemeter_client.auth_status()
     # Never print secrets; status itself does not include them.
     print("auth_status:", json.dumps(status))
+    if not status.get("prom_url_configured"):
+        print("SKIP live Telemeter: set PROM_URL (Telemeter API base URL)")
+        return
     if not status.get("credentials_present"):
         print("SKIP live Telemeter: set CLIENTID and CLIENTSECRET to test queries")
         return
     if not status.get("token_ok"):
         raise SystemExit(f"credentials present but token failed: {status.get('error')}")
 
-    result = recipes.run_recipe("total_running_vms", scope="external", mode="instant")
+    result = recipes.run_recipe(
+        "subscribed_clusters_count", scope="external", mode="instant"
+    )
     series = result.get("result", {}).get("data") or []
-    print("run_recipe(total_running_vms) series_returned:", len(series))
+    print("run_recipe(subscribed_clusters_count) series_returned:", len(series))
     print("promql:", result.get("promql"))
     if series:
         # Print only the numeric value, not label sets that may identify clusters.
         sample = series[0]
         print("sample value field present:", "value" in sample or "values" in sample)
         if "value" in sample:
-            print("sample value:", sample["value"][-1] if isinstance(sample["value"], list) else sample["value"])
+            print(
+                "sample value:",
+                sample["value"][-1]
+                if isinstance(sample["value"], list)
+                else sample["value"],
+            )
 
 
 async def main() -> None:

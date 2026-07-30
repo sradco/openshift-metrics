@@ -1,0 +1,35 @@
+# Live Telemeter evals — requires PROM_URL + CLIENTID + CLIENTSECRET in env/.env.
+# Keep parallel low to respect MCP rate limits (default 30 queries / 10 min).
+# Uses cross-domain fleet recipes (not domain-specific packs).
+kind: Eval
+metadata:
+  name: "openshift-metrics-telemeter"
+
+config:
+  agent:
+    type: "builtin.llm-agent"
+    model: "openai:gpt-5-nano"
+
+  mcpConfigFile: mcp-config.yaml
+
+  llmJudge:
+    ref:
+      type: builtin.llm-agent
+      model: "openai:gpt-5-nano"
+
+  taskSets:
+    - path: tasks/telemeter/auth-status.yaml
+      assertions:
+        toolsUsed:
+          - server: openshift-metrics
+            tool: telemeter_auth_status
+        minToolCalls: 1
+        maxToolCalls: 3
+
+    - path: tasks/telemeter/subscribed-clusters-recipe.yaml
+      assertions:
+        toolsUsed:
+          - server: openshift-metrics
+            tool: run_recipe
+        minToolCalls: 1
+        maxToolCalls: 4

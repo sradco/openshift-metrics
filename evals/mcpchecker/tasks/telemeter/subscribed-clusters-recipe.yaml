@@ -1,0 +1,27 @@
+kind: Task
+apiVersion: mcpchecker/v1alpha2
+metadata:
+  name: "telemeter-subscribed-clusters-recipe"
+  difficulty: medium
+  parallel: true
+  runs: 1
+  labels:
+    category: telemeter
+    suite: openshift-metrics
+    toolType: recipe
+  description: |
+    Live Telemeter: run subscribed_clusters_count (external) and include the
+    PromQL (query_used) plus a numeric total.
+spec:
+  verify:
+    - llmJudge:
+        contains: "the reply includes both a numeric cluster count and the PromQL used (query_used or cluster_subscribed)"
+  prompt:
+    inline: |
+      You MUST call the MCP tool named run_recipe exactly once with these
+      arguments and no others first:
+        recipe_id: subscribed_clusters_count
+        scope: external
+      Do not call list_recipes or search_metrics.
+      Then answer with (1) the numeric value from the tool result and
+      (2) the PromQL from the query_used field.

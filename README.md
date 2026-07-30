@@ -7,9 +7,10 @@ from Cursor or Claude Code.
 **Home:** [rhobs/openshift-metrics](https://github.com/rhobs/openshift-metrics)
 (**private** RHOBS org repo — request GitHub access if you cannot clone).
 
-**Honest scope:** `knowledge/recipes/cnv.yaml` is an **example fleet recipe
-pack** (many entries use Virtualization metrics). The join patterns are
-reusable for any team — copy, swap the metric, or add
+**Honest scope:** This MCP is for **any Telemetry user**. Cross-domain
+fleet recipes live in `knowledge/recipes/fleet.yaml`.
+`knowledge/recipes/cnv.yaml` is an **optional example pack** (Virtualization
+metrics). Join patterns are reusable — copy, swap the metric, or add
 `knowledge/recipes/<domain>.yaml`. See
 [docs/KNOWN_LIMITATIONS.md](docs/KNOWN_LIMITATIONS.md).
 
@@ -49,7 +50,7 @@ Use `.env` locally (gitignored). See `.env.example`.
 
 - General Prometheus metrics metadata (YAML, partial)
 - Telemetry allowlist sync from CMO (+ CI drift check)
-- Example fleet PromQL recipes (`knowledge/recipes/cnv.yaml`; patterns reusable)
+- Fleet PromQL recipes (`knowledge/recipes/fleet.yaml` + optional domain packs)
 - MCP server for Cursor / Claude Code
 - Optional script to refresh general metrics from a cluster Prometheus
 
@@ -178,15 +179,18 @@ Then **restart the openshift-metrics MCP** (or reload the Cursor window).
 | `is_telemetry_metric` | Membership check |
 | `describe_metric` | Merge catalog + allowlist metadata |
 | `list_recipes` / `run_recipe` | Named fleet PromQL (example pack + future packs) |
+| `render_scoped_promql` / `query_scoped_metric` | Scoped sum/count/sum_by for any allowlisted metric |
 | `query_telemeter` | Raw PromQL |
 | `telemeter_auth_status` | Credential/token check (no secrets echoed) |
 
 `search_metrics` / `describe_metric` read **committed catalog YAML**
 (metric and label descriptions when present). They do not auto-probe live
-Telemeter label values. Use `query_telemeter` only when you need live data.
+Telemeter label values. Use `query_telemeter` only when you need live data
+that recipes / scoped tools cannot express.
 
-`run_recipe` and `query_telemeter` always return `query_used` (the PromQL
-executed). Agents should include that query in user-facing answers.
+`run_recipe`, `query_scoped_metric`, and `query_telemeter` always return
+`query_used` (the PromQL executed). Agents should include that query in
+user-facing answers.
 
 Before every Telemeter call, PromQL **guardrails** (adapted from
 [rhobs/obs-mcp](https://github.com/rhobs/obs-mcp)) reject blanket regex,
@@ -218,13 +222,31 @@ python src/sync_telemetry_allowlist.py --check
 PYTHONPATH=src python scripts/smoke_test_mcp.py
 ```
 
+### Agent evals (mcpchecker)
+
+Optional LLM-agent verification (pattern from rhobs/obs-mcp; **custom
+tasks** for this MCP’s tools — not a copy of obs-mcp PromQL tasks):
+
+```bash
+export OPENAI_API_KEY=...
+make install-mcpchecker
+make run-mcpchecker-eval                          # catalog + guardrails
+make run-mcpchecker-eval EVAL_CONFIG=eval-telemeter.yaml  # live Telemeter
+```
+
+See [`evals/mcpchecker/README.md`](evals/mcpchecker/README.md).
+
 CI runs unit tests and allowlist `--check` on pull requests
 (`.github/workflows/ci.yml`).
 
 ## Join patterns & recipes
 
-- `knowledge/join_patterns.md` — Telemeter `_id` join idioms
-- `knowledge/recipes/cnv.yaml` — example fleet recipes (virt-seeded; reusable patterns)
+- `knowledge/join_patterns.md` — Telemeter `_id` join idioms (+ harvest notes)
+- `knowledge/recipes/fleet.yaml` — cross-domain subscribed / capacity (any user)
+- `knowledge/recipes/cnv.yaml` — optional CNV / virt example pack
+- `knowledge/recipes/coo.yaml` — Cluster Observability Operator
+- `knowledge/recipes/ocp-builds.yaml` — OpenShift Builds
+- `knowledge/recipes/rhacs.yaml` — RHACS / ACS
 - Add more packs as `knowledge/recipes/<domain>.yaml`
 
 ## Support

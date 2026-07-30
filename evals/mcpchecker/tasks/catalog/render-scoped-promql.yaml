@@ -1,0 +1,23 @@
+kind: Task
+apiVersion: mcpchecker/v1alpha2
+metadata:
+  name: "catalog-render-scoped-promql"
+  difficulty: easy
+  parallel: true
+  runs: 1
+  labels:
+    category: catalog
+    suite: openshift-metrics
+    toolType: scoped
+  description: |
+    Agent should use render_scoped_promql (not raw invented joins) for an
+    allowlisted metric that may not have a dedicated recipe.
+spec:
+  verify:
+    - llmJudge:
+        contains: "the agent shows PromQL that includes cluster_subscribed or an 'and on (_id)' scope join for external subscribed clusters"
+  prompt:
+    inline: |
+      Using the openshift-metrics MCP, build (do not invent by hand) scoped
+      PromQL to sum ceph_cluster_total_bytes for external subscribed clusters.
+      Prefer render_scoped_promql. Show the PromQL.

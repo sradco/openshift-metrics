@@ -1,0 +1,24 @@
+kind: Task
+apiVersion: mcpchecker/v1alpha2
+metadata:
+  name: "catalog-list-recipes"
+  difficulty: easy
+  parallel: true
+  runs: 1
+  labels:
+    category: catalog
+    suite: openshift-metrics
+    toolType: recipes
+  description: |
+    Agent should list recipes and mention a known cross-domain recipe id
+    from the fleet pack (or any pack).
+spec:
+  verify:
+    - llmJudge:
+        contains: "the agent lists at least one recipe id such as subscribed_clusters_count or total_cpu_capacity_cores"
+  prompt:
+    inline: |
+      Using the openshift-metrics MCP, list available fleet PromQL recipes.
+      Use topic="fleet" (or leave topic empty) — do NOT pass "openshift-metrics"
+      as the pack value; valid packs are fleet, cnv, coo, ocp-builds, rhacs.
+      Name at least one recipe id from the results.

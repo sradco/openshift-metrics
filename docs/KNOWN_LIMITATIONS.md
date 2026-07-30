@@ -4,17 +4,26 @@ Honest status for adopters. Update this when limitations are fixed.
 
 ## Scope of recipes
 
-- `knowledge/recipes/cnv.yaml` is an **example fleet recipe pack**, seeded
-  with OpenShift Virtualization / CNV metrics. The join patterns
-  (`{scope_join}`, `{subscribed_selector}`, `{filters}`, account rollups)
-  are reusable for any Telemetry metric.
+- This MCP is for **any Telemetry user**, not one product domain.
+- `knowledge/recipes/fleet.yaml` — cross-domain fleet recipes (subscribed
+  clusters, capacity, …).
+- Domain packs (`cnv.yaml`, `coo.yaml`, …) are **optional** examples.
+  Join patterns (`{scope_join}`, `{subscribed_selector}`, `{filters}`,
+  account rollups) are reusable for any Telemetry metric; add
+  `knowledge/recipes/<domain>.yaml` as needed.
 - Recipe `scope`: `external` (default), `internal`, or `all` (all
   **subscribed** clusters — external+internal). `all` is not unfiltered
   Telemeter.
 - Some recipe join metrics (`ocm_subscription`, `cluster_subscribed`,
   `id_primary_host_type`) are Telemeter/OCM enrichment series and may not
   appear in the CMO allowlist; see `knowledge/join_patterns.md`.
-
+- For allowlisted metrics **without** a named recipe, use
+  `render_scoped_promql` / `query_scoped_metric` (`sum`, `count_clusters`,
+  or `sum_by` + scope/filters). Prefer `run_recipe` when a pack already
+  answers the question. Use raw `query_telemeter` only for custom PromQL.
+  `sum_by` only groups labels present on the metric (not `ebs_account` /
+  `email_domain`). `label_equals` values must be plain (no quotes/commas).
+  Leave `require_telemetry=true` unless querying known enrichment metrics.
 ## Catalogs
 
 - `docs/telemetry/allowlist.yaml` is a synced snapshot of CMO (kept fresh
@@ -48,11 +57,16 @@ Honest status for adopters. Update this when limitations are fixed.
 - CI runs offline unit tests and allowlist `--check` against live CMO.
 - There is no automated Telemeter e2e in CI (credentials). Run
   `scripts/smoke_test_mcp.py` manually before relying on live queries.
+- Optional **mcpchecker** agent evals live under `evals/mcpchecker/`
+  (catalog tasks need no Telemeter; live suite needs creds). See that
+  directory’s README. These are not obs-mcp task copies — different tools
+  and backend.
 
 ## Runtime
 
 - Results are truncated (`max_series`, default 50).
-- Prefer `run_recipe` over unconstrained `query_telemeter` for fleet asks.
+- Prefer `run_recipe`, then `query_scoped_metric`, over unconstrained
+  `query_telemeter` for fleet asks.
 - **PromQL guardrails** (adapted from
   [rhobs/obs-mcp](https://github.com/rhobs/obs-mcp)) run before every
   Telemeter query:

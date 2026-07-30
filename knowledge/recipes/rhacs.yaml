@@ -1,0 +1,74 @@
+# RHACS (ACS) fleet recipes for Telemeter.
+# Sourced from app-interface grafana-dashboard-rhacs-telemetry ConfigMap,
+# adapted to preferred join idioms and {scope_join}/{filters}.
+#
+# RHACS series often key by central_id / sensor_id; cluster joins use the
+# `_id` label when present. Prefer ocm_subscription for account/domain
+# (dashboard uses ebs_account_account_type_email_domain_internal enrichment).
+#
+# Placeholders: {scope_join}, {subscribed_selector}, {filters}
+# See knowledge/join_patterns.md.
+recipes:
+  - id: rhacs_central_instances
+    title: RHACS Central instances
+    description: >
+      Count of distinct Central instances (central_id) on subscribed
+      clusters in scope.
+    topics: [rhacs, acs, install, central]
+    promql: >
+      count(count by (central_id) (
+      rhacs:telemetry:rox_central_info {scope_join} {filters}))
+
+  - id: rhacs_sensor_instances
+    title: RHACS Sensor instances
+    description: >
+      Count of distinct Sensor instances (sensor_id) on subscribed
+      clusters in scope.
+    topics: [rhacs, acs, install, sensor]
+    promql: >
+      count(count by (sensor_id) (
+      rhacs:telemetry:rox_sensor_info {scope_join} {filters}))
+
+  - id: rhacs_secured_clusters_total
+    title: RHACS secured clusters (sum)
+    description: >
+      Sum of rhacs:telemetry:rox_central_secured_clusters across Centrals
+      on subscribed clusters in scope.
+    topics: [rhacs, acs, secured, clusters]
+    promql: >
+      sum(rhacs:telemetry:rox_central_secured_clusters
+      {scope_join} {filters})
+
+  - id: rhacs_secured_nodes_total
+    title: RHACS secured nodes (sum)
+    description: >
+      Sum of rhacs:telemetry:rox_central_secured_nodes across Centrals
+      on subscribed clusters in scope.
+    topics: [rhacs, acs, secured, nodes]
+    promql: >
+      sum(rhacs:telemetry:rox_central_secured_nodes
+      {scope_join} {filters})
+
+  - id: rhacs_secured_vcpus_total
+    title: RHACS secured vCPUs (sum)
+    description: >
+      Sum of rhacs:telemetry:rox_central_secured_vcpus across Centrals
+      on subscribed clusters in scope.
+    topics: [rhacs, acs, secured, capacity]
+    promql: >
+      sum(rhacs:telemetry:rox_central_secured_vcpus
+      {scope_join} {filters})
+
+  - id: rhacs_sensors_by_account
+    title: RHACS sensors by account
+    description: >
+      Count of Sensor-bearing clusters by ebs_account and email_domain.
+      Multi-series; use max_series or filters.
+    topics: [rhacs, acs, accounts, sensor]
+    promql: >
+      sort_desc(count by (ebs_account, email_domain) (
+      (max by (_id) (rhacs:telemetry:rox_sensor_info)
+      {scope_join} {filters})
+      * on (_id) group_left(email_domain, ebs_account)
+      group by (_id, ebs_account, email_domain) (topk by (_id) (1, ocm_subscription{}))
+      ))

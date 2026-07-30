@@ -1,0 +1,23 @@
+kind: Task
+apiVersion: mcpchecker/v1alpha2
+metadata:
+  name: "catalog-search-metrics"
+  difficulty: easy
+  parallel: true
+  runs: 1
+  labels:
+    category: catalog
+    suite: openshift-metrics
+    toolType: search
+  description: |
+    Agent should call search_metrics (or related catalog tools) and return
+    at least one real metric name from the results.
+spec:
+  verify:
+    - llmJudge:
+        contains: "the agent names at least one concrete metric_name returned by the MCP search (not a fabricated name)"
+  prompt:
+    inline: |
+      Using the openshift-metrics MCP, search the metrics catalog for
+      "prometheus" (or similar) and name one metric_name from the results.
+      Prefer a Telemetry-flagged hit if present.

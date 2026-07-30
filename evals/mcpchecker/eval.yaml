@@ -1,0 +1,64 @@
+# Catalog + guardrail evals (no live Telemeter required).
+# Requires: OPENAI_API_KEY (or other agent/judge config), mcpchecker installed.
+kind: Eval
+metadata:
+  name: "openshift-metrics-catalog"
+
+config:
+  agent:
+    type: "builtin.llm-agent"
+    model: "openai:gpt-5-nano"
+
+  mcpConfigFile: mcp-config.yaml
+
+  llmJudge:
+    ref:
+      type: builtin.llm-agent
+      model: "openai:gpt-5-nano"
+
+  taskSets:
+    - path: tasks/catalog/is-telemetry-metric.yaml
+      assertions:
+        toolsUsed:
+          - server: openshift-metrics
+            toolPattern: "(is_telemetry_metric|list_telemetry_metrics|search_metrics|describe_metric)"
+        minToolCalls: 1
+        maxToolCalls: 6
+
+    - path: tasks/catalog/nonexistent-metric.yaml
+      assertions:
+        toolsUsed:
+          - server: openshift-metrics
+            toolPattern: "(is_telemetry_metric|list_telemetry_metrics|search_metrics|describe_metric)"
+        minToolCalls: 1
+        maxToolCalls: 6
+
+    - path: tasks/catalog/search-metrics.yaml
+      assertions:
+        toolsUsed:
+          - server: openshift-metrics
+            toolPattern: "(search_metrics|list_telemetry_metrics|describe_metric)"
+        minToolCalls: 1
+        maxToolCalls: 6
+
+    - path: tasks/catalog/list-recipes.yaml
+      assertions:
+        toolsUsed:
+          - server: openshift-metrics
+            tool: list_recipes
+        minToolCalls: 1
+        maxToolCalls: 4
+
+    - path: tasks/catalog/render-scoped-promql.yaml
+      assertions:
+        toolsUsed:
+          - server: openshift-metrics
+            toolPattern: "(render_scoped_promql|query_scoped_metric)"
+        minToolCalls: 1
+        maxToolCalls: 6
+
+    - path: tasks/guardrails/prefer-recipe-over-blast.yaml
+      assertions:
+        # Agent should refuse or warn quickly, not attempt execution.
+        minToolCalls: 0
+        maxToolCalls: 15
