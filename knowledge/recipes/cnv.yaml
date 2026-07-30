@@ -124,12 +124,6 @@ recipes:
       and on (_id) group by (_id) (cnv:vmi_status_running:count)
       {filters})
 
-  - id: cpu_capacity_all_clusters
-    title: CPU capacity of all clusters in scope
-    description: Sum of cluster CPU capacity for subscribed clusters in scope.
-    topics: [cpu, capacity]
-    promql: sum(cluster:capacity_cpu_cores:sum {scope_join} {filters})
-
   - id: percent_clusters_with_vms
     title: Percent of clusters with running VMs
     description: >
@@ -213,3 +207,193 @@ recipes:
       * on (_id) group_left(email_domain, ebs_account)
       group by (_id, ebs_account, email_domain) (topk by (_id) (1, ocm_subscription{}))
       ))
+
+  # --- From rhobs/monitoring CNV overview (gaps vs earlier pack) ---
+
+  - id: cnv_clusters_by_version
+    title: CNV clusters by CSV version
+    description: >
+      Count of clusters with a succeeded hyperconverged CSV, broken down by
+      full version label. Multi-series; use max_series when querying.
+    topics: [cnv, install, version]
+    promql: >
+      sort_desc(count by (version) (
+      group by (_id, version) (csv_succeeded{name=~".*hyperconverged.*"} == 1)
+      {scope_join} {filters}))
+
+  - id: cnv_clusters_by_minor_version
+    title: CNV clusters by major.minor version
+    description: >
+      Count of clusters with succeeded hyperconverged CSV, rolled up to
+      major.minor (e.g. 4.17) via label_replace on version.
+    topics: [cnv, install, version]
+    promql: >
+      sort_desc(count by (major_minor_version) (
+      group by (_id, major_minor_version) (
+      label_replace(
+      csv_succeeded{name=~".*hyperconverged.*"} == 1,
+      "major_minor_version", "$1.$2", "version", "(\\d+)\\.(\\d+)\\..*"
+      )
+      )
+      {scope_join} {filters}))
+
+  - id: cnv_clusters_by_channel
+    title: CNV clusters by OLM channel
+    description: >
+      Count of clusters with a hyperconverged OLM subscription, broken down
+      by channel (subscription_sync_total). This can differ from
+      clusters_with_cnv_installed (csv_succeeded) — channel uses subscription
+      sync presence, not CSV succeeded phase. Multi-series result.
+    topics: [cnv, install, channel]
+    promql: >
+      sort_desc(count by (channel) (
+      group by (_id, channel) (
+      topk by (_id) (1,
+      subscription_sync_total{installed=~".*hyperconverged.*",channel!=""}
+      )
+      )
+      {scope_join} {filters}))
+
+  - id: cnv_abnormal_by_reason
+    title: CNV abnormal CSVs by reason and phase
+    description: >
+      Count of clusters with an abnormal hyperconverged CSV
+      (Pending|Failed phases), broken down by reason and phase.
+    topics: [cnv, install, failures]
+    promql: >
+      sort_desc(count by (reason, phase) (
+      group by (_id, reason, phase) (
+      topk by (_id) (1,
+      csv_abnormal{name=~".*hyperconverged.*",phase=~"Pending|Failed"} == 1
+      )
+      )
+      {scope_join} {filters}))
+
+  - id: cnv_clusters_with_additional_network
+    title: CNV clusters with additional networks
+    description: >
+      Count of CNV-installed clusters that report any
+      cluster:network_attachment_definition_instances:max series.
+    topics: [cnv, network, nad]
+    promql: >
+      count(count by (_id) (
+      group by (_id) (cluster:network_attachment_definition_instances:max)
+      and on (_id) group by (_id) (csv_succeeded{name=~".*hyperconverged.*"} == 1)
+      {scope_join} {filters}))
+
+  - id: percent_cnv_clusters_with_additional_network
+    title: Percent of CNV clusters with additional networks
+    description: >
+      Percentage of CNV-installed clusters in scope that have at least one
+      NetworkAttachmentDefinition instance metric.
+    topics: [cnv, network, nad]
+    promql: >
+      count(group by (_id) (cluster:network_attachment_definition_instances:max)
+      and on (_id) group by (_id) (csv_succeeded{name=~".*hyperconverged.*"} == 1)
+      {scope_join} {filters})
+      /
+      count(group by (_id) (csv_succeeded{name=~".*hyperconverged.*"} == 1)
+      {scope_join} {filters})
+      * 100
+
+  - id: cnv_clusters_with_bridge_network
+    title: CNV clusters with bridge / cnv-bridge NAD
+    description: >
+      CNV clusters whose NAD networks label includes bridge or cnv-bridge
+      as a whole token (anchored among comma-separated values).
+    topics: [cnv, network, nad, bridge]
+    promql: >
+      count(count by (_id) (
+      group by (_id) (
+      cluster:network_attachment_definition_instances:max{networks=~"(^|,)(bridge|cnv-bridge)(,|$)"}
+      )
+      and on (_id) group by (_id) (csv_succeeded{name=~".*hyperconverged.*"} == 1)
+      {scope_join} {filters}))
+
+  - id: cnv_clusters_with_sriov_network
+    title: CNV clusters with SR-IOV NAD
+    description: >
+      CNV clusters with a networks series matching sriov or ib-sriov as a
+      whole token (anchored among comma-separated values). Note: Telemetry
+      often emits separate sriov/ib-sriov/any series per cluster, so this
+      count can be close to all CNV+NAD clusters — interpret carefully.
+    topics: [cnv, network, nad, sriov]
+    promql: >
+      count(count by (_id) (
+      group by (_id) (
+      cluster:network_attachment_definition_instances:max{networks=~"(^|,)(sriov|ib-sriov)(,|$)"}
+      )
+      and on (_id) group by (_id) (csv_succeeded{name=~".*hyperconverged.*"} == 1)
+      {scope_join} {filters}))
+
+  - id: running_vms_by_os
+    title: Running VMs by OS template label
+    description: >
+      Sum running VMIs by os label (excluding empty and "<none>"). Multi-series.
+    topics: [cnv, vms, distribution]
+    promql: >
+      sort_desc(sum by (os) (
+      cnv:vmi_status_running:count{os!="",os!="<none>"}
+      {scope_join} {filters}))
+
+  - id: running_vms_by_flavor
+    title: Running VMs by flavor
+    description: >
+      Sum running VMIs by flavor label (excluding empty and "<none>").
+    topics: [cnv, vms, distribution]
+    promql: >
+      sort_desc(sum by (flavor) (
+      cnv:vmi_status_running:count{flavor!="",flavor!="<none>"}
+      {scope_join} {filters}))
+
+  - id: running_vms_by_workload
+    title: Running VMs by workload
+    description: >
+      Sum running VMIs by workload label (excluding empty and "<none>").
+    topics: [cnv, vms, distribution]
+    promql: >
+      sort_desc(sum by (workload) (
+      cnv:vmi_status_running:count{workload!="",workload!="<none>"}
+      {scope_join} {filters}))
+
+  - id: running_vms_by_guest_os
+    title: Running VMs by guest OS name
+    description: >
+      Sum running VMIs by guest_os_name (excluding empty and "<none>").
+    topics: [cnv, vms, distribution, guest_os]
+    promql: >
+      sort_desc(sum by (guest_os_name) (
+      cnv:vmi_status_running:count{guest_os_name!="",guest_os_name!="<none>"}
+      {scope_join} {filters}))
+
+  - id: running_vms_by_instance_type
+    title: Running VMs by instance type
+    description: >
+      Sum running VMIs by instance_type (excluding empty, "<none>", "<other>").
+    topics: [cnv, vms, distribution, instance_type]
+    promql: >
+      sort_desc(sum by (instance_type) (
+      cnv:vmi_status_running:count{instance_type!="",instance_type!="<none>",instance_type!="<other>"}
+      {scope_join} {filters}))
+
+  - id: running_vms_by_preference
+    title: Running VMs by preference
+    description: >
+      Sum running VMIs by preference (excluding empty, "<none>", "<other>").
+    topics: [cnv, vms, distribution]
+    promql: >
+      sort_desc(sum by (preference) (
+      cnv:vmi_status_running:count{preference!="",preference!="<none>",preference!="<other>"}
+      {scope_join} {filters}))
+
+  - id: host_type_distribution_with_vms
+    title: Host type distribution for clusters with VMs
+    description: >
+      Count of clusters that have running VMIs, broken down by
+      id_primary_host_type host_type.
+    topics: [cnv, host_type, vms]
+    promql: >
+      sort_desc(count by (host_type) (
+      count by (_id, host_type) (id_primary_host_type)
+      and on (_id) group by (_id) (cnv:vmi_status_running:count)
+      {scope_join} {filters}))

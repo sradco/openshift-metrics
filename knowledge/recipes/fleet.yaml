@@ -1,0 +1,33 @@
+# Cross-domain fleet PromQL recipes for Telemeter (any Telemetry user).
+# Domain-specific packs (e.g. knowledge/recipes/cnv.yaml) are optional examples.
+#
+# Placeholders:
+#   {scope_join}           — subscribed filter for external/internal/all
+#   {subscribed_selector}  — subscribed metric selector for the scope (never empty)
+#   {filters}              — optional ebs_account / email_domain / _id filters
+#
+# See knowledge/join_patterns.md.
+recipes:
+  - id: subscribed_clusters_count
+    title: Subscribed clusters in scope
+    description: >
+      Count of subscribed clusters for the selected scope
+      (external, internal, or all subscribed).
+    topics: [fleet, subscription, clusters]
+    promql: count(group by (_id) ({subscribed_selector}) {filters})
+
+  - id: total_cpu_capacity_cores
+    title: Total cluster CPU capacity (cores)
+    description: >
+      Sum of cluster:capacity_cpu_cores:sum across subscribed clusters
+      in the selected scope.
+    topics: [fleet, cpu, capacity]
+    promql: sum(cluster:capacity_cpu_cores:sum {scope_join} {filters})
+
+  - id: total_memory_capacity_bytes
+    title: Total cluster memory capacity (bytes)
+    description: >
+      Sum of cluster:capacity_memory_bytes:sum across subscribed clusters
+      in the selected scope.
+    topics: [fleet, memory, capacity]
+    promql: sum(cluster:capacity_memory_bytes:sum {scope_join} {filters})

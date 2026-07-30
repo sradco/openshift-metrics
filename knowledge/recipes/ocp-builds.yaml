@@ -1,0 +1,62 @@
+# OpenShift Builds fleet recipes for Telemeter.
+# Sourced from redhat-openshift-builds/telemetry dashboards (via app-interface),
+# adapted to {scope_join}/{filters}. Grafana $source / $source_version vars
+# are replaced by recipe scope/filters.
+#
+# Placeholders: {scope_join}, {subscribed_selector}, {filters}
+# See knowledge/join_patterns.md.
+recipes:
+  - id: clusters_with_openshift_builds
+    title: Clusters with OpenShift builds
+    description: >
+      Count of clusters reporting openshift:build_by_strategy:sum
+      (at least one build strategy present).
+    topics: [builds, ocp-builds, clusters]
+    promql: >
+      count(count by (_id) (openshift:build_by_strategy:sum)
+      {scope_join} {filters})
+
+  - id: total_openshift_builds
+    title: Total OpenShift builds
+    description: >
+      Sum of openshift:build_by_strategy:sum across clusters in scope
+      (lifetime / aggregated build counts as telemetered).
+    topics: [builds, ocp-builds, fleet]
+    promql: sum(openshift:build_by_strategy:sum {scope_join} {filters})
+
+  - id: openshift_builds_by_strategy
+    title: OpenShift builds by strategy
+    description: >
+      Sum of builds broken down by strategy label. Multi-series result;
+      use max_series when querying.
+    topics: [builds, ocp-builds, strategy]
+    promql: >
+      sort_desc(sum by (strategy) (
+      openshift:build_by_strategy:sum {scope_join} {filters}))
+
+  - id: openshift_builds_cluster_utilization
+    title: Percent of clusters using OpenShift builds
+    description: >
+      Percentage of subscribed clusters in scope that report
+      openshift:build_by_strategy:sum. Prefer subscribed denominator over
+      raw cluster_version (dashboard Grafana pattern).
+    topics: [builds, ocp-builds, utilization, clusters]
+    promql: >
+      count(group by (_id) (openshift:build_by_strategy:sum)
+      {scope_join} {filters})
+      /
+      count(group by (_id) ({subscribed_selector}) {filters})
+      * 100
+
+  - id: openshift_builds_by_account
+    title: OpenShift builds by account
+    description: >
+      Sum builds by ebs_account and email_domain. Use filters for a single
+      account, or max_series to limit fleet table size.
+    topics: [builds, ocp-builds, accounts]
+    promql: >
+      sort_desc(sum by (ebs_account, email_domain) (
+      (openshift:build_by_strategy:sum {scope_join} {filters})
+      * on (_id) group_left(email_domain, ebs_account)
+      group by (_id, ebs_account, email_domain) (topk by (_id) (1, ocm_subscription{}))
+      ))

@@ -1,0 +1,75 @@
+# Cluster Observability Operator (COO) fleet recipes for Telemeter.
+# Sourced from rhobs/observability-operator dashboards (via app-interface SaaS),
+# adapted to {scope_join}/{filters} and preferred join idioms.
+#
+# Placeholders: {scope_join}, {subscribed_selector}, {filters}
+# See knowledge/join_patterns.md.
+recipes:
+  - id: clusters_with_coo_installed
+    title: Clusters with COO installed
+    description: >
+      Count of clusters with a succeeded cluster-observability-operator CSV
+      (Cluster Observability Operator installed).
+    topics: [coo, observability, install, clusters]
+    promql: >
+      count(group by (_id) (csv_succeeded{name=~".*cluster-observability-operator.*"} == 1)
+      {scope_join} {filters})
+
+  - id: coo_install_failure_rate
+    title: COO install failure rate
+    description: >
+      Fraction of clusters reporting a cluster-observability-operator CSV
+      where csv_succeeded == 0 (failed / not succeeded), in the selected scope.
+      Returns a ratio in [0, 1].
+    topics: [coo, observability, install, failures]
+    promql: >
+      count(group by (_id) (csv_succeeded{name=~".*cluster-observability-operator.*"} == 0)
+      {scope_join} {filters})
+      /
+      count(group by (_id) (csv_succeeded{name=~".*cluster-observability-operator.*"})
+      {scope_join} {filters})
+
+  - id: coo_abnormal_by_reason
+    title: COO abnormal CSVs by reason and phase
+    description: >
+      Count of clusters with an abnormal cluster-observability-operator CSV,
+      broken down by reason and phase (csv_abnormal == 1).
+    topics: [coo, observability, install, failures]
+    promql: >
+      sort_desc(count by (reason, phase) (
+      group by (_id, reason, phase) (
+      topk by (_id) (1, csv_abnormal{name=~".*cluster-observability-operator.*"} == 1)
+      )
+      {scope_join} {filters}))
+
+  - id: coo_by_channel
+    title: COO installs by OLM channel
+    description: >
+      Count of clusters with a succeeded COO CSV, broken down by OLM Subscription
+      channel (from subscription_sync_total). Multi-series result; use max_series
+      when querying.
+    topics: [coo, observability, install, channel]
+    promql: >
+      sort_desc(count by (channel) (
+      group by (_id, channel) (
+      topk by (_id) (1,
+      subscription_sync_total{name="cluster-observability-operator",channel!=""}
+      )
+      )
+      and on (_id) group by (_id) (
+      csv_succeeded{name=~".*cluster-observability-operator.*"} == 1
+      )
+      {scope_join} {filters}))
+
+  - id: accounts_with_coo_installed
+    title: Accounts with COO installed
+    description: >
+      Count of distinct ebs_account values with a succeeded
+      cluster-observability-operator CSV (scope defaults to external).
+    topics: [coo, observability, install, accounts]
+    promql: >
+      count(count by (ebs_account)(
+      (csv_succeeded{name=~".*cluster-observability-operator.*"} == 1
+      * on (_id) group_left(ebs_account)
+      group by (_id, ebs_account) (topk by (_id) (1, ocm_subscription{})))
+      {scope_join} {filters}))
