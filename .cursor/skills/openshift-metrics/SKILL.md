@@ -3,7 +3,8 @@ name: openshift-metrics
 description: >-
   Query OpenShift metrics documentation and Telemetry (Telemeter) fleet
   data via the openshift-metrics MCP server. Use when asking what metrics
-  exist, whether a metric is telemetered, or for CNV/fleet Telemeter stats.
+  exist, whether a metric is telemetered, or for fleet Telemeter stats
+  (any domain — Virtualization/CNV is one example pack).
 ---
 
 # OpenShift Metrics / Telemetry
@@ -11,14 +12,19 @@ description: >-
 ## When to use
 
 - "Is metric X in Telemetry?"
-- "What CNV metrics do we collect to Telemetry?"
-- "How many external running VMs?"
+- "What metrics do we collect to Telemetry?"
+- Fleet Telemeter questions (subscribed clusters, capacity, installs, …)
 - Per-account / per-cluster Telemeter questions
+- Domain packs (e.g. CNV) when those recipes exist
 
 ## Scope
 
-`cnv.yaml` is an example fleet recipe pack (often virt metrics). Patterns
-are reusable — copy/adapt or add `knowledge/recipes/<domain>.yaml`.
+This MCP is for **all Telemetry users**, not one product.
+
+- `knowledge/recipes/fleet.yaml` — cross-domain fleet recipes
+- `knowledge/recipes/cnv.yaml` — optional example pack (virt-seeded)
+- Add more packs as `knowledge/recipes/<domain>.yaml`
+- Join patterns are reusable across domains
 
 ## Learning about metrics
 
@@ -35,13 +41,17 @@ Treat chat transcripts as sensitive — they retain Telemeter labels.
 ## Tool order
 
 1. `list_recipes` / `run_recipe` for known fleet questions
-2. `is_telemetry_metric` / `list_telemetry_metrics` / `describe_metric`
-3. `search_metrics` for general catalog (not all are Telemetry)
-4. `query_telemeter` for ad-hoc PromQL (guardrailed — see below)
-5. `telemeter_auth_status` if live queries fail
+   (pass `pack=` / `topic=` when many packs exist)
+2. `query_scoped_metric` / `render_scoped_promql` when no recipe fits
+   (allowlisted metric + `sum` | `count_clusters` | `sum_by` + scope;
+   `sum_by` only for labels on the metric — not ebs_account)
+3. `is_telemetry_metric` / `list_telemetry_metrics` / `describe_metric`
+4. `search_metrics` for general catalog (not all are Telemetry)
+5. `query_telemeter` for custom PromQL scoped tools cannot express
+6. `telemeter_auth_status` if live queries fail
 
 Telemeter calls reject blanket `=~".*"`, empty `{}`, and are rate-limited.
-Prefer recipes. See `docs/KNOWN_LIMITATIONS.md`.
+Prefer recipes, then scoped tools. See `docs/KNOWN_LIMITATIONS.md`.
 
 ## Rules
 
@@ -52,3 +62,4 @@ Prefer recipes. See `docs/KNOWN_LIMITATIONS.md`.
 - Catalog tools work without credentials; live Telemeter needs
   `PROM_URL` / `CLIENTID` / `CLIENTSECRET` (no hardcoded Telemeter URL)
 - Credentials: `#rhobs-support`. MCP bugs: repo OWNERS.
+- Optional agent evals: `make run-mcpchecker-eval` (see `evals/mcpchecker/`)

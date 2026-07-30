@@ -13,7 +13,13 @@ from mcp_server.catalog import (  # noqa: E402
     is_telemetry_metric,
     list_telemetry_metrics,
 )
-from mcp_server.recipes import list_recipes, render_recipe_promql, run_recipe  # noqa: E402
+from mcp_server.recipes import (  # noqa: E402
+    list_recipes,
+    query_scoped_metric,
+    render_recipe_promql,
+    render_scoped_promql,
+    run_recipe,
+)
 from mcp_server.server import _ensure_query_used  # noqa: E402
 
 
@@ -45,6 +51,66 @@ def test_list_cnv_recipes():
     ids = {r["id"] for r in recipes}
     assert "total_running_vms" in ids
     assert "clusters_with_cnv_installed" in ids
+    assert "cnv_clusters_by_minor_version" in ids
+    assert "cnv_clusters_with_additional_network" in ids
+    assert "running_vms_by_guest_os" in ids
+    assert "cnv_abnormal_by_reason" in ids
+
+
+def test_list_fleet_recipes():
+    recipes = list_recipes(topic="fleet")
+    ids = {r["id"] for r in recipes}
+    assert "subscribed_clusters_count" in ids
+    assert "total_cpu_capacity_cores" in ids
+    assert "total_memory_capacity_bytes" in ids
+
+
+def test_render_fleet_subscribed_clusters():
+    rendered = render_recipe_promql("subscribed_clusters_count", scope="external")
+    promql = rendered["promql"]
+    assert "id_version_ebs_account_internal:cluster_subscribed" in promql
+    assert 'internal=""' in promql
+
+
+def test_allowlist_contains_platform_metric():
+    assert is_telemetry_metric("cluster:capacity_cpu_cores:sum")["in_telemetry"] is True
+
+
+def test_render_cnv_minor_version_recipe():
+    rendered = render_recipe_promql("cnv_clusters_by_minor_version", scope="external")
+    promql = rendered["promql"]
+    assert "label_replace" in promql
+    assert "major_minor_version" in promql
+    assert "hyperconverged" in promql
+    assert "and on (_id)" in promql
+
+
+def test_list_harvested_recipe_packs():
+    coo = {r["id"] for r in list_recipes(topic="coo")}
+    builds = {r["id"] for r in list_recipes(topic="builds")}
+    rhacs = {r["id"] for r in list_recipes(topic="rhacs")}
+    assert "clusters_with_coo_installed" in coo
+    assert "clusters_with_openshift_builds" in builds
+    assert "rhacs_central_instances" in rhacs
+
+
+def test_render_coo_recipe_includes_scope_join():
+    rendered = render_recipe_promql("clusters_with_coo_installed", scope="external")
+    promql = rendered["promql"]
+    assert "cluster-observability-operator" in promql
+    assert "and on (_id)" in promql
+    assert 'internal=""' in promql
+
+
+def test_render_builds_utilization_uses_subscribed_selector():
+    rendered = render_recipe_promql(
+        "openshift_builds_cluster_utilization",
+        scope="all",
+    )
+    promql = rendered["promql"]
+    assert "openshift:build_by_strategy:sum" in promql
+    assert "id_version_ebs_account_internal:cluster_subscribed" in promql
+    assert "cluster_version" not in promql
 
 
 def test_render_recipe_includes_external_join_and_filter():
@@ -147,3 +213,161 @@ def test_list_recipes_reports_scope_support():
     assert recipes["total_running_vms"]["supports_scope"] is True
     assert recipes["total_running_vms"]["supports_filters"] is True
     assert recipes["percent_clusters_with_vms"]["supports_scope"] is True
+
+
+def test_render_scoped_promql_sum():
+    rendered = render_scoped_promql(
+        "cnv:vmi_status_running:count",
+        aggregation="sum",
+        scope="external",
+        ebs_account="EXAMPLE_ONLY",
+    )
+    promql = rendered["promql"]
+    assert promql.startswith("sum(")
+    assert "cnv:vmi_status_running:count" in promql
+    assert "and on (_id)" in promql
+    assert 'internal=""' in promql
+    assert 'ebs_account="EXAMPLE_ONLY"' in promql
+    assert rendered["in_telemetry"] is True
+
+
+def test_render_scoped_promql_count_clusters_and_sum_by():
+    count_q = render_scoped_promql(
+        "openshift:build_by_strategy:sum",
+        aggregation="count_clusters",
+        scope="all",
+    )["promql"]
+    assert count_q.startswith("count(group by (_id)")
+    assert "openshift:build_by_strategy:sum" in count_q
+    assert "cluster_subscribed" in count_q
+    assert 'internal=""' not in count_q
+
+    by_q = render_scoped_promql(
+        "openshift:build_by_strategy:sum",
+        aggregation="sum_by",
+        by="strategy",
+        scope="external",
+    )["promql"]
+    assert "sum by (strategy)" in by_q
+    assert by_q.startswith("sort_desc(")
+
+
+def test_render_scoped_promql_label_equals_and_rejects():
+    with_labels = render_scoped_promql(
+        "cluster:usage:resources:sum",
+        aggregation="sum",
+        label_equals="resource=virtualmachines.kubevirt.io",
+        scope="external",
+    )["promql"]
+    assert 'cluster:usage:resources:sum{resource="virtualmachines.kubevirt.io"}' in (
+        with_labels
+    )
+
+    try:
+        render_scoped_promql("not_a_real_metric_zzz", aggregation="sum")
+        raise AssertionError("expected ValueError")
+    except ValueError as exc:
+        assert "allowlist" in str(exc).lower()
+
+    try:
+        render_scoped_promql(
+            "cnv:vmi_status_running:count",
+            aggregation="sum_by",
+        )
+        raise AssertionError("expected ValueError")
+    except ValueError as exc:
+        assert "by=" in str(exc)
+
+    try:
+        render_scoped_promql("metric;drop", aggregation="sum", require_telemetry=False)
+        raise AssertionError("expected ValueError")
+    except ValueError as exc:
+        assert "identifier" in str(exc).lower()
+
+    # Quote/comma injection must be rejected (not parsed into extra matchers).
+    try:
+        render_scoped_promql(
+            "cnv:vmi_status_running:count",
+            label_equals='os=rhel9",job="x',
+        )
+        raise AssertionError("expected ValueError")
+    except ValueError as exc:
+        assert "quote" in str(exc).lower()
+
+    try:
+        render_scoped_promql(
+            "cnv:vmi_status_running:count",
+            aggregation="sum_by",
+            by="ebs_account",
+        )
+        raise AssertionError("expected ValueError")
+    except ValueError as exc:
+        assert "ebs_account" in str(exc)
+        assert "ocm_subscription" in str(exc) or "enrichment" in str(exc).lower()
+
+
+def test_list_recipes_pack_filter():
+    fleet = list_recipes(pack="fleet")
+    assert fleet
+    assert all(r["pack"] == "fleet" for r in fleet)
+    assert {r["id"] for r in fleet} >= {"subscribed_clusters_count"}
+
+
+def test_query_scoped_metric_includes_query_used(monkeypatch):
+    def fake_instant(query, max_series=50):
+        return {
+            "query": query,
+            "mode": "instant",
+            "series_returned": 0,
+            "data": [],
+        }
+
+    monkeypatch.setattr("mcp_server.telemeter_client.query_instant", fake_instant)
+    result = query_scoped_metric(
+        "cnv:vmi_status_running:count",
+        aggregation="sum",
+        scope="external",
+    )
+    assert result["query_used"] == result["promql"]
+    assert "cnv:vmi_status_running:count" in result["query_used"]
+    assert "result" in result
+
+
+def test_run_recipe_range_passes_step(monkeypatch):
+    seen: dict[str, object] = {}
+
+    def fake_range(query, hours=3.0, step="1h", max_series=50):
+        seen["step"] = step
+        seen["query"] = query
+        return {"query": query, "mode": "range", "data": []}
+
+    monkeypatch.setattr("mcp_server.telemeter_client.query_range", fake_range)
+    result = run_recipe(
+        "total_running_vms",
+        scope="external",
+        mode="range",
+        step="15m",
+        hours=1.0,
+    )
+    assert seen["step"] == "15m"
+    assert "cnv:vmi_status_running:count" in result["query_used"]
+
+
+def test_query_scoped_metric_range_passes_step(monkeypatch):
+    seen: dict[str, object] = {}
+
+    def fake_range(query, hours=3.0, step="1h", max_series=50):
+        seen["step"] = step
+        seen["query"] = query
+        return {"query": query, "mode": "range", "data": []}
+
+    monkeypatch.setattr("mcp_server.telemeter_client.query_range", fake_range)
+    result = query_scoped_metric(
+        "cnv:vmi_status_running:count",
+        aggregation="sum",
+        mode="range",
+        step="15m",
+        hours=1.0,
+    )
+    assert seen["step"] == "15m"
+    assert "cnv:vmi_status_running:count" in result["query_used"]
