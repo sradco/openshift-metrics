@@ -587,7 +587,7 @@ matches:
   owners: (@openshift/openshift-team-monitoring)
   metric_name: namespace_job:scrape_samples_post_metric_relabeling:topk3
   match_type: exact
-- selector: '{__name__="collector:node_scrape_collector_success:avg",collector=~"ethtool|cpufreq|tcpstat|netdev|netclass|buddyinfo|mountstats|ksmd|processes|systemd|softirqs|zoneinfo|dmmultipath"}'
+- selector: '{__name__="collector:node_scrape_collector_success:avg",collector=~"ethtool|cpufreq|tcpstat|netdev|netclass|buddyinfo|mountstats|ksmd|processes|systemd|softirqs|zoneinfo|dmmultipath|nvmesubsystem"}'
   description: collector:node_scrape_collector_success:avg reports the average success of optional node_exporter's
     collectors running in the cluster.
   owners: (@openshift/openshift-team-monitoring)
