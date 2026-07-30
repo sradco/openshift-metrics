@@ -1,0 +1,9 @@
+# MCP config for mcpchecker (stdio — same transport as Cursor).
+# Paths are relative to this file's directory when launched via Makefile.
+mcpServers:
+  openshift-metrics:
+    type: stdio
+    command: bash
+    args:
+      - ./run-mcp-stdio.sh
+    enableAllTools: true

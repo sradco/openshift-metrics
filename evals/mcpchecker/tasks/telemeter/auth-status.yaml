@@ -1,0 +1,23 @@
+kind: Task
+apiVersion: mcpchecker/v1alpha2
+metadata:
+  name: "telemeter-auth-status"
+  difficulty: easy
+  parallel: true
+  runs: 1
+  labels:
+    category: telemeter
+    suite: openshift-metrics
+    toolType: smoke-test
+  description: |
+    Agent calls telemeter_auth_status and reports whether credentials /
+    PROM_URL look configured (without printing secrets).
+spec:
+  verify:
+    - llmJudge:
+        contains: "the agent reports auth status including whether credentials or PROM_URL are configured, without revealing secrets"
+  prompt:
+    inline: |
+      Using the openshift-metrics MCP, check Telemeter auth status.
+      Do not print any secrets. Summarize whether PROM_URL and credentials
+      appear configured and whether a token can be obtained.

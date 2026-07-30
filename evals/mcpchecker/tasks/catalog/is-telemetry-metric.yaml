@@ -1,0 +1,22 @@
+kind: Task
+apiVersion: mcpchecker/v1alpha2
+metadata:
+  name: "catalog-is-telemetry-metric"
+  difficulty: easy
+  parallel: true
+  runs: 1
+  labels:
+    category: catalog
+    suite: openshift-metrics
+    toolType: allowlist
+  description: |
+    Agent should use is_telemetry_metric (or allowlist tools) and correctly
+    report that a well-known platform metric is in Telemetry.
+spec:
+  verify:
+    - llmJudge:
+        contains: "the metric is in telemetry or telemetered (in_telemetry true / allowlist)"
+  prompt:
+    inline: |
+      Is the metric cluster:capacity_cpu_cores:sum in OpenShift Telemetry?
+      Use the openshift-metrics MCP tools. Answer yes or no and briefly say how you checked.

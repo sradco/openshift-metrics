@@ -16,6 +16,10 @@ results/
 tmp/
 .cache/
 
+# mcpchecker local binaries / run outputs (do not commit live transcripts)
+bin/
+evals/mcpchecker/mcpchecker-*-out.json
+
 # Python
 __pycache__/
 *.py[cod]
