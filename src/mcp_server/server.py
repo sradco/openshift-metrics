@@ -25,6 +25,7 @@ except ImportError:
 from mcp.server.mcpserver import MCPServer
 
 from mcp_server import catalog, recipes, telemeter_client
+from mcp_server.guardrails import rate_limit_status
 
 mcp = MCPServer(
     name="openshift-metrics",
@@ -32,26 +33,23 @@ mcp = MCPServer(
         "OpenShift metrics catalog and Telemetry (Telemeter) query tools for "
         "any Telemetry user — not limited to one product domain. "
         "knowledge/recipes/fleet.yaml has cross-domain fleet recipes; "
-        "knowledge/recipes/cnv.yaml is an optional example pack (virt-seeded). "
-        "Add more packs as knowledge/recipes/<domain>.yaml. Join patterns are "
-        "reusable across domains. "
-        "Prefer search_metrics/describe_metric for metric and label docs from "
-        "committed catalogs (partial). Do not assume automatic live label "
-        "discovery — query_telemeter only for explicit live PromQL. "
+        "optional packs include cnv.yaml and okd.yaml. "
+        "Add more packs as knowledge/recipes/<domain>.yaml. "
+        "RESEARCH BUDGET: plan 2–5 queries; prefer run_recipe; at most one "
+        "list_recipes (topic/pack) and ≤2 catalog lookups; watch "
+        "queries_remaining_in_window and stop exploring when low. "
+        "Cohort playbook: observability check → cohort recipe → measure → "
+        "age → adverse-effects recipes → stop. "
+        "RHCOS/FCOS 9 vs 10 is NOT telemetered (mcd_host_os_and_version). "
+        "Prefer search_metrics/describe_metric for metric docs (partial). "
         "General catalog metrics are NOT all telemetered — use is_telemetry_metric. "
         "Never commit credentials or query results containing customer identifiers. "
-        "Treat Cursor/Claude chat transcripts as sensitive: Telemeter results may "
-        "include ebs_account, email_domain, and cluster _id. "
-        "CRITICAL: When run_recipe, query_scoped_metric, or query_telemeter succeeds "
-        "(or returns an error after building PromQL), your user-facing reply MUST "
-        "include the PromQL from the query_used field (or promql/query). Never "
-        "answer with only a number or summary — always show the query that was used. "
-        "Tool order for live fleet data: (1) run_recipe if a named recipe fits, "
-        "(2) query_scoped_metric / render_scoped_promql for an allowlisted metric "
-        "with sum|count_clusters|sum_by + scope/filters, (3) query_telemeter only "
-        "for custom PromQL those tools cannot express. Default scope is external. "
-        "Telemeter queries are guarded (blanket regex, unrestricted selectors, "
-        "rate limits) — adapted from rhobs/obs-mcp. Prefer run_recipe."
+        "Treat chat transcripts as sensitive (ebs_account, email_domain, _id). "
+        "CRITICAL: Always include query_used PromQL in the user-facing reply. "
+        "Tool order: (1) run_recipe, (2) query_scoped_metric / render_scoped_promql, "
+        "(3) query_telemeter only for custom PromQL. Default scope is external; "
+        "okd pack omits OCM scope_join. Guardrails: blanket regex, unrestricted "
+        "selectors, rate limits (adapted from rhobs/obs-mcp)."
     ),
 )
 
@@ -60,9 +58,19 @@ def _json(data: Any) -> str:
     return json.dumps(data, indent=2, default=str)
 
 
+def _with_rate_status(payload: dict[str, Any]) -> dict[str, Any]:
+    """Attach rate-limit remaining so agents can self-throttle."""
+    out = dict(payload)
+    status = rate_limit_status()
+    out["queries_remaining_in_window"] = status.get("queries_remaining_in_window")
+    out["queries_used_in_window"] = status.get("queries_used_in_window")
+    out["rate_limit"] = status
+    return out
+
+
 def _ensure_query_used(payload: dict[str, Any], promql: str | None) -> dict[str, Any]:
     """Attach query_used so agents always have a single field to show users."""
-    out = dict(payload)
+    out = _with_rate_status(payload)
     if promql:
         out["query_used"] = promql
         out.setdefault(
@@ -94,13 +102,27 @@ def search_metrics(
 
 
 @mcp.tool()
-def list_telemetry_metrics(query: str = "", limit: int = 100) -> str:
-    """List metrics/selectors from the Telemetry allowlist (CMO-derived)."""
+def list_telemetry_metrics(
+    query: str = "",
+    limit: int = 25,
+    detail: bool = False,
+) -> str:
+    """List metrics/selectors from the Telemetry allowlist (CMO-derived).
+
+    Default limit=25 and detail=false (truncated descriptions, no owners).
+    Pass detail=true only when full allowlist text is required.
+    Prefer a tight query= filter over browsing the whole allowlist.
+    """
     return _json(
         {
             "allowlist": catalog.allowlist_source_info(),
+            "detail": detail,
             "matches": catalog.list_telemetry_metrics(
-                query=query or None, limit=limit
+                query=query or None, limit=limit, detail=detail
+            ),
+            "note": (
+                "Slim listing by default. Use detail=true for full descriptions/"
+                "owners. Prefer is_telemetry_metric for a single name."
             ),
         }
     )
@@ -119,20 +141,27 @@ def describe_metric(metric_name: str) -> str:
 
 
 @mcp.tool()
-def list_recipes(topic: str = "", pack: str = "") -> str:
+def list_recipes(topic: str = "", pack: str = "", detail: bool = False) -> str:
     """List named PromQL recipes (fleet pack + any domain packs).
 
-    Optional topic (e.g. cnv, fleet, builds) and/or pack to reduce the list.
+    Optional topic (e.g. cnv, fleet, okd, builds) and/or pack to reduce the list.
     pack is the recipe YAML filename stem (NOT the MCP server name):
-      fleet | cnv | coo | ocp-builds | rhacs
+      fleet | cnv | okd | coo | ocp-builds | rhacs
     Omit pack to list all packs. Omit topic to list all topics.
+    detail=false (default) omits long descriptions — id/title/topics only.
     """
     return _json(
         {
+            "detail": detail,
             "recipes": recipes.list_recipes(
                 topic=topic or None,
                 pack=pack or None,
-            )
+                detail=detail,
+            ),
+            "note": (
+                "Slim listing by default. Pass detail=true for descriptions. "
+                "Prefer run_recipe with a known id over re-listing."
+            ),
         }
     )
 
@@ -175,11 +204,13 @@ def run_recipe(
         )
     except KeyError as exc:
         return _json(
-            {
-                "error": str(exc),
-                "error_code": "UNKNOWN_RECIPE",
-                "available": [r["id"] for r in recipes.list_recipes()],
-            }
+            _with_rate_status(
+                {
+                    "error": str(exc),
+                    "error_code": "UNKNOWN_RECIPE",
+                    "available": [r["id"] for r in recipes.list_recipes()],
+                }
+            )
         )
     except Exception as exc:  # noqa: BLE001
         payload: dict[str, Any] = {
@@ -190,7 +221,7 @@ def run_recipe(
         }
         if getattr(exc, "guardrail", None):
             payload["guardrail"] = exc.guardrail
-        return _json(payload)
+        return _json(_with_rate_status(payload))
 
 
 @mcp.tool()
@@ -307,7 +338,7 @@ def query_scoped_metric(
         }
         if getattr(exc, "guardrail", None):
             payload["guardrail"] = exc.guardrail
-        return _json(payload)
+        return _json(_with_rate_status(payload))
 
 
 @mcp.tool()
@@ -358,9 +389,9 @@ def query_telemeter(
 def telemeter_auth_status() -> str:
     """Check whether Telemeter credentials are present and a token can be obtained.
 
-    Never returns secret values.
+    Never returns secret values. Includes queries_remaining_in_window.
     """
-    return _json(telemeter_client.auth_status())
+    return _json(_with_rate_status(telemeter_client.auth_status()))
 
 
 def main() -> None:

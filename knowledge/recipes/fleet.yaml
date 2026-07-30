@@ -31,3 +31,53 @@ recipes:
       in the selected scope.
     topics: [fleet, memory, capacity]
     promql: sum(cluster:capacity_memory_bytes:sum {scope_join} {filters})
+
+  - id: median_cluster_age_days_with_vms
+    title: Median cluster age (days) among clusters with VMs
+    description: >
+      Median age in days of subscribed clusters that have running VMIs,
+      from cluster_version{type="cluster"} (cluster object age, not VM
+      uptime).
+    topics: [fleet, cnv, vms, age]
+    promql: >
+      quantile(0.5, (time() - cluster_version{type="cluster"})
+      and on (_id) group by (_id) (cnv:vmi_status_running:count)
+      {scope_join} {filters}) / 86400
+
+  - id: firing_alerts_on_clusters_with_vms
+    title: Firing critical/warning alerts on clusters with VMs
+    description: >
+      Count of firing critical|warning ALERTS series on subscribed
+      clusters that have running VMIs, by alertname and severity.
+      Empty result means none at query time.
+    topics: [fleet, cnv, vms, alerts, adverse]
+    promql: >
+      count by (alertname, severity) (
+      ALERTS{alertstate="firing",severity=~"critical|warning"}
+      and on (_id) group by (_id) (cnv:vmi_status_running:count)
+      {scope_join} {filters})
+
+  - id: degraded_operators_on_clusters_with_vms
+    title: Degraded operators on clusters with VMs
+    description: >
+      Count of Degraded=true cluster_operator_conditions on subscribed
+      clusters that have running VMIs, broken down by operator name.
+    topics: [fleet, cnv, vms, operators, adverse]
+    promql: >
+      count by (name) (
+      cluster_operator_conditions{condition="Degraded",status="true"}
+      and on (_id) group by (_id) (cnv:vmi_status_running:count)
+      {scope_join} {filters})
+
+  - id: worker_os_id_distribution
+    title: Worker OS id distribution
+    description: >
+      Count of capacity series by label_node_openshift_io_os_id for
+      non-master nodes (rhcos, scos, fedora, rhel, centos, …). Does NOT
+      distinguish RHCOS/FCOS 9 vs 10 — mcd_host_os_and_version is not
+      telemetered. Use this when asking about host OS family only.
+    topics: [fleet, os, rhcos, workers]
+    promql: >
+      count by (label_node_openshift_io_os_id) (
+      node_role_os_version_machine:cpu_capacity_cores:sum{label_node_role_kubernetes_io_master=""}
+      {scope_join} {filters})

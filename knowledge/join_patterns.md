@@ -149,6 +149,55 @@ cnv:vmi_status_running:count
 Prefer named recipes in `knowledge/recipes/cnv.yaml` over hand-rolling
 these joins.
 
+## OKD cohort
+
+Identify OKD via the version label (not OCM subscription):
+
+```promql
+cluster_version{type="current",version=~".*-okd-.*"}
+```
+
+Prefer `knowledge/recipes/okd.yaml` (`okd_running_vms`,
+`okd_clusters_with_running_vms`, `okd_firing_alerts_with_vms`, …).
+Those recipes **omit** `{scope_join}` because OKD is usually outside
+subscribed external/internal scope.
+
+## Host OS family vs OS major version
+
+Telemeter exposes node OS **family** on:
+
+```promql
+node_role_os_version_machine:cpu_capacity_cores:sum
+```
+
+via `label_node_openshift_io_os_id` (`rhcos`, `scos`, `fedora`, `rhel`,
+`centos`, …). Recipe: `worker_os_id_distribution`.
+
+`mcd_host_os_and_version` (RHCOS/FCOS version string) is **not** on the
+CMO Telemetry allowlist — Telemeter cannot distinguish RHCOS/FCOS 9 vs
+10. Say so instead of inventing proxies beyond TechPreview feature-set
+heuristics (weak; not a recipe).
+
+## Cluster age (not VM uptime)
+
+```promql
+time() - cluster_version{type="cluster"}
+```
+
+Value is unix age of the cluster version object. Recipes:
+`median_cluster_age_days_with_vms`,
+`okd_median_cluster_age_days_with_vms`.
+
+## Adverse effects (alerts / degraded operators)
+
+Prefer recipes over ad-hoc joins:
+
+- `firing_alerts_on_clusters_with_vms` / `okd_firing_alerts_with_vms`
+- `degraded_operators_on_clusters_with_vms`
+
+Use `ALERTS{alertstate="firing",severity=~"critical|warning"}` (allowlisted
+severities) — never blanket `alertname=~".*"`.
+
 ## Other packs (dashboard harvest)
 
 | Pack | Source | Notes |

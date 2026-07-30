@@ -33,3 +33,11 @@ config:
             tool: run_recipe
         minToolCalls: 1
         maxToolCalls: 4
+
+    - path: tasks/telemeter/okd-vms-lean.yaml
+      assertions:
+        toolsUsed:
+          - server: openshift-metrics
+            toolPattern: "(run_recipe|list_recipes)"
+        minToolCalls: 1
+        maxToolCalls: 8

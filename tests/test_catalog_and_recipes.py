@@ -14,13 +14,16 @@ from mcp_server.catalog import (  # noqa: E402
     list_telemetry_metrics,
 )
 from mcp_server.recipes import (  # noqa: E402
+    clear_recipe_cache,
     list_recipes,
     query_scoped_metric,
     render_recipe_promql,
     render_scoped_promql,
     run_recipe,
 )
-from mcp_server.server import _ensure_query_used  # noqa: E402
+from mcp_server.server import _ensure_query_used, _with_rate_status  # noqa: E402
+
+clear_recipe_cache()
 
 
 def test_allowlist_contains_cnv_vmi():
@@ -38,6 +41,17 @@ def test_list_telemetry_metrics_filter():
         "cnv" in (h.get("metric_name") or h.get("metric_name_regex") or "").lower()
         for h in hits
     )
+    # Slim default: no owners key
+    assert "owners" not in hits[0]
+
+
+def test_list_telemetry_metrics_detail():
+    slim = list_telemetry_metrics(query="cluster_version", limit=5, detail=False)
+    full = list_telemetry_metrics(query="cluster_version", limit=5, detail=True)
+    assert slim and full
+    assert "owners" not in slim[0] or slim[0].get("owners") is None
+    # Detail rows keep full allowlist fields when present on the entry.
+    assert any("description" in row for row in full)
 
 
 def test_describe_metric_telemetry_flag():
@@ -63,6 +77,28 @@ def test_list_fleet_recipes():
     assert "subscribed_clusters_count" in ids
     assert "total_cpu_capacity_cores" in ids
     assert "total_memory_capacity_bytes" in ids
+    assert "median_cluster_age_days_with_vms" in ids
+    assert "firing_alerts_on_clusters_with_vms" in ids
+    assert "degraded_operators_on_clusters_with_vms" in ids
+    assert "worker_os_id_distribution" in ids
+    # Slim default omits description
+    assert "description" not in recipes[0]
+
+
+def test_list_recipes_detail_includes_description():
+    recipes = list_recipes(topic="fleet", detail=True)
+    assert recipes
+    assert recipes[0].get("description")
+
+
+def test_list_okd_recipes():
+    recipes = list_recipes(pack="okd")
+    ids = {r["id"] for r in recipes}
+    assert "okd_running_vms" in ids
+    assert "okd_clusters_with_running_vms" in ids
+    assert "okd_firing_alerts_with_vms" in ids
+    assert "okd_median_cluster_age_days_with_vms" in ids
+    assert all(r["supports_scope"] is False for r in recipes)
 
 
 def test_render_fleet_subscribed_clusters():
@@ -70,6 +106,41 @@ def test_render_fleet_subscribed_clusters():
     promql = rendered["promql"]
     assert "id_version_ebs_account_internal:cluster_subscribed" in promql
     assert 'internal=""' in promql
+
+
+def test_render_okd_running_vms_omits_subscribed_join():
+    rendered = render_recipe_promql("okd_running_vms", scope="external")
+    promql = rendered["promql"]
+    assert "cnv:vmi_status_running:count" in promql
+    assert 'version=~".*-okd-.*"' in promql
+    assert "cluster_subscribed" not in promql
+    assert rendered["supports_scope"] is False
+
+
+def test_render_okd_vms_by_minor():
+    promql = render_recipe_promql("okd_running_vms_by_minor")["promql"]
+    assert "label_replace" in promql
+    assert "minor" in promql
+    assert 'version=~".*-okd-.*"' in promql
+
+
+def test_render_worker_os_id_and_adverse_recipes():
+    os_q = render_recipe_promql("worker_os_id_distribution", scope="external")["promql"]
+    assert "label_node_openshift_io_os_id" in os_q
+    assert 'label_node_role_kubernetes_io_master=""' in os_q
+    assert "and on (_id)" in os_q
+
+    alerts = render_recipe_promql(
+        "firing_alerts_on_clusters_with_vms", scope="external"
+    )["promql"]
+    assert 'ALERTS{alertstate="firing"' in alerts
+    assert "cnv:vmi_status_running:count" in alerts
+
+
+def test_with_rate_status_attaches_remaining():
+    payload = _with_rate_status({"ok": True})
+    assert "queries_remaining_in_window" in payload
+    assert "rate_limit" in payload
 
 
 def test_allowlist_contains_platform_metric():
