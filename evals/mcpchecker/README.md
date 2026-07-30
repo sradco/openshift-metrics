@@ -57,9 +57,9 @@ make summary-mcpchecker-eval
 
 | Category | Tasks | Telemeter? |
 |----------|--------|------------|
-| `catalog` | allowlist check, missing metric, search, list recipes | No |
-| `guardrails` | refuse blanket fleet dump / prefer recipes | No (should avoid blast) |
-| `telemeter` | auth status, `subscribed_clusters_count` recipe + `query_used` | Yes |
+| `catalog` | allowlist check, missing metric, search, list recipes, scoped PromQL | No |
+| `guardrails` | refuse blanket dump; lean research budget (≤8 tools) | No |
+| `telemeter` | auth; subscribed_clusters; lean `okd_running_vms` recipe | Yes |
 
 ## Relationship to obs-mcp / openshift-mcp-server
 

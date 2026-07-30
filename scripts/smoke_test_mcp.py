@@ -72,6 +72,8 @@ def check_catalog() -> None:
 def check_recipes() -> None:
     listed = recipes.list_recipes(topic="fleet")
     print(f"fleet recipes: {len(listed)}")
+    if any("description" in r for r in listed):
+        raise SystemExit("slim list_recipes should omit description by default")
     rendered = recipes.render_recipe_promql(
         "subscribed_clusters_count", scope="external"
     )
@@ -79,6 +81,14 @@ def check_recipes() -> None:
     print(" ", rendered["promql"])
     if "cluster_subscribed" not in rendered["promql"]:
         raise SystemExit("fleet recipe did not use cluster_subscribed")
+
+    okd = recipes.render_recipe_promql("okd_running_vms")
+    print("okd_running_vms promql:")
+    print(" ", okd["promql"])
+    if "cluster_subscribed" in okd["promql"]:
+        raise SystemExit("okd recipe must omit OCM subscribed join")
+    if 'version=~".*-okd-.*"' not in okd["promql"]:
+        raise SystemExit("okd recipe missing okd version matcher")
 
     scoped = recipes.render_scoped_promql(
         "cluster:capacity_cpu_cores:sum",

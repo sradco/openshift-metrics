@@ -130,6 +130,35 @@ def reset_rate_limit_for_tests() -> None:
         _RATE_HITS.clear()
 
 
+def rate_limit_status() -> dict[str, Any]:
+    """Return queries used/remaining in the current rate-limit window.
+
+    Does not consume a rate-limit slot. Safe to attach to tool responses so
+    agents can stop exploring before hitting GUARDRAIL_VIOLATION.
+    """
+    g = parse_guardrails()
+    if g is None or not g.rate_limit_enabled:
+        return {
+            "rate_limit": "disabled",
+            "queries_remaining_in_window": None,
+            "queries_used_in_window": None,
+            "max_queries": None,
+            "window_seconds": None,
+        }
+    now = time.monotonic()
+    with _RATE_LOCK:
+        while _RATE_HITS and now - _RATE_HITS[0] > g.window_seconds:
+            _RATE_HITS.popleft()
+        used = len(_RATE_HITS)
+        return {
+            "rate_limit": "enabled",
+            "queries_used_in_window": used,
+            "queries_remaining_in_window": max(0, g.max_queries - used),
+            "max_queries": g.max_queries,
+            "window_seconds": g.window_seconds,
+        }
+
+
 def parse_guardrails(value: str | None = None) -> Guardrails | None:
     """Parse TELEMETER_GUARDRAILS like obs-mcp --guardrails.
 
@@ -199,9 +228,10 @@ def enforce(query: str, *, mode: str = "instant", hours: float = 0.0) -> dict[st
     """Run configured guardrails; return metadata. Raises GuardrailViolation."""
     g = parse_guardrails()
     if g is None:
-        return {"guardrails": "none"}
+        return {"guardrails": "none", **rate_limit_status()}
     g.check_query(query, mode=mode, hours=hours)
     _rate_limit_check(g)
+    status = rate_limit_status()
     return {
         "guardrails": "enforced",
         "disallow_blanket_regex": g.disallow_blanket_regex,
@@ -210,4 +240,6 @@ def enforce(query: str, *, mode: str = "instant", hours: float = 0.0) -> dict[st
         "rate_limit": g.rate_limit_enabled,
         "max_queries": g.max_queries,
         "window_seconds": g.window_seconds,
+        "queries_used_in_window": status.get("queries_used_in_window"),
+        "queries_remaining_in_window": status.get("queries_remaining_in_window"),
     }

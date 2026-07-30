@@ -20,5 +20,5 @@ spec:
     inline: |
       Using the openshift-metrics MCP, list available fleet PromQL recipes.
       Use topic="fleet" (or leave topic empty) — do NOT pass "openshift-metrics"
-      as the pack value; valid packs are fleet, cnv, coo, ocp-builds, rhacs.
+      as the pack value; valid packs are fleet, cnv, okd, coo, ocp-builds, rhacs.
       Name at least one recipe id from the results.

@@ -1,0 +1,88 @@
+# OKD cohort recipes for Telemeter.
+#
+# OKD is identified via cluster_version version=~".*-okd-.*".
+# These recipes intentionally omit {scope_join}: OKD clusters are usually
+# outside OCM subscribed external/internal scope. Optional {filters} still
+# support cluster_id / account joins when those enrichment series exist.
+#
+# See knowledge/join_patterns.md (OKD + OS version limitations).
+recipes:
+  - id: okd_clusters_count
+    title: OKD clusters
+    description: >
+      Count of clusters whose current cluster_version matches OKD
+      (version contains "-okd-"). Not limited to OCM subscribed scope.
+    topics: [okd, clusters, fleet]
+    promql: >
+      count(count by (_id) (
+      cluster_version{type="current",version=~".*-okd-.*"}
+      ) {filters})
+
+  - id: okd_running_vms
+    title: Running VMs on OKD clusters
+    description: >
+      Sum of running VMI counts on clusters with an OKD cluster_version.
+    topics: [okd, cnv, vms]
+    promql: >
+      sum(cnv:vmi_status_running:count
+      and on (_id) group by (_id) (
+      cluster_version{type="current",version=~".*-okd-.*"}
+      ) {filters})
+
+  - id: okd_clusters_with_running_vms
+    title: OKD clusters with running VMs
+    description: >
+      Count of OKD clusters that have at least one running VMI.
+    topics: [okd, cnv, vms, clusters]
+    promql: >
+      count(count by (_id) (
+      cnv:vmi_status_running:count
+      and on (_id) group by (_id) (
+      cluster_version{type="current",version=~".*-okd-.*"}
+      ) {filters}))
+
+  - id: okd_running_vms_by_minor
+    title: Running VMs on OKD by minor version
+    description: >
+      Sum running VMIs on OKD clusters, rolled up to major.minor
+      (e.g. 4.21). Multi-series; use max_series when querying.
+    topics: [okd, cnv, vms, version]
+    promql: >
+      sort_desc(sum by (minor) (
+      label_replace(
+      (
+      cnv:vmi_status_running:count
+      * on (_id) group_left(version)
+      group by (_id, version) (
+      cluster_version{type="current",version=~".*-okd-.*"}
+      )
+      ) {filters},
+      "minor", "$1", "version", "(4\\.\\d+).*"
+      )))
+
+  - id: okd_median_cluster_age_days_with_vms
+    title: Median OKD cluster age (days) among clusters with VMs
+    description: >
+      Median age in days of OKD clusters that have running VMIs, from
+      cluster_version{type="cluster"} (cluster object age, not VM uptime).
+    topics: [okd, cnv, vms, age]
+    promql: >
+      quantile(0.5, (time() - cluster_version{type="cluster",version=~".*-okd-.*"})
+      and on (_id) group by (_id) (cnv:vmi_status_running:count)
+      {filters}) / 86400
+
+  - id: okd_firing_alerts_with_vms
+    title: Firing critical/warning alerts on OKD clusters with VMs
+    description: >
+      Count of firing critical|warning ALERTS series on OKD clusters that
+      also have running VMIs, broken down by alertname and severity.
+      Empty result means no such firing alerts at query time.
+    topics: [okd, cnv, vms, alerts, adverse]
+    promql: >
+      count by (alertname, severity) (
+      ALERTS{alertstate="firing",severity=~"critical|warning"}
+      and on (_id) group by (_id) (
+      cluster_version{type="current",version=~".*-okd-.*"}
+      )
+      and on (_id) group by (_id) (cnv:vmi_status_running:count)
+      {filters})

@@ -123,10 +123,14 @@ class RateLimitTest(unittest.TestCase):
             },
         ):
             gr.enforce("sum(up)", mode="instant")
+            status = gr.rate_limit_status()
+            self.assertEqual(status["queries_used_in_window"], 1)
+            self.assertEqual(status["queries_remaining_in_window"], 1)
             gr.enforce("sum(up)", mode="instant")
             with self.assertRaises(gr.GuardrailViolation) as ctx:
                 gr.enforce("sum(up)", mode="instant")
             self.assertEqual(ctx.exception.guardrail, "rate-limit")
+            self.assertEqual(gr.rate_limit_status()["queries_remaining_in_window"], 0)
         gr.reset_rate_limit_for_tests()
 
 

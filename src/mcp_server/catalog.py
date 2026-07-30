@@ -69,7 +69,32 @@ def is_telemetry_metric(metric_name: str) -> dict[str, Any]:
     }
 
 
-def list_telemetry_metrics(query: str | None = None, limit: int = 100) -> list[dict[str, Any]]:
+_DESC_SLIM_LEN = 120
+
+
+def _slim_telemetry_entry(entry: dict[str, Any]) -> dict[str, Any]:
+    """Compact allowlist row for agent token savings."""
+    desc = (entry.get("description") or "").strip()
+    if len(desc) > _DESC_SLIM_LEN:
+        desc = desc[: _DESC_SLIM_LEN - 1].rstrip() + "…"
+    out: dict[str, Any] = {
+        "metric_name": entry.get("metric_name"),
+        "match_type": entry.get("match_type"),
+        "description": desc,
+    }
+    if entry.get("metric_name_regex"):
+        out["metric_name_regex"] = entry.get("metric_name_regex")
+    if entry.get("selector"):
+        # Keep selector — often needed to see label filters — but skip owners.
+        out["selector"] = entry.get("selector")
+    return out
+
+
+def list_telemetry_metrics(
+    query: str | None = None,
+    limit: int = 25,
+    detail: bool = False,
+) -> list[dict[str, Any]]:
     matches = list(load_telemetry_allowlist().get("matches") or [])
     if query:
         q = query.lower()
@@ -81,7 +106,10 @@ def list_telemetry_metrics(query: str | None = None, limit: int = 100) -> list[d
             or q in (m.get("description") or "").lower()
             or q in (m.get("selector") or "").lower()
         ]
-    return matches[: max(1, min(limit, 500))]
+    capped = matches[: max(1, min(limit, 500))]
+    if detail:
+        return capped
+    return [_slim_telemetry_entry(m) for m in capped]
 
 
 def search_metrics(query: str, limit: int = 25, telemetry_only: bool = False) -> list[dict[str, Any]]:

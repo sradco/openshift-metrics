@@ -63,7 +63,12 @@ def clear_recipe_cache() -> None:
 def list_recipes(
     topic: str | None = None,
     pack: str | None = None,
+    detail: bool = False,
 ) -> list[dict[str, Any]]:
+    """List recipes. Default omits long descriptions (token-cheap).
+
+    Pass detail=True to include full description text.
+    """
     topic_l = (topic or "").strip().lower()
     pack_l = (pack or "").strip().lower()
     out = []
@@ -74,18 +79,18 @@ def list_recipes(
         if topic_l and topic_l not in topics and topic_l not in recipe["id"].lower():
             if topic_l not in (recipe.get("description") or "").lower():
                 continue
-        out.append(
-            {
-                "id": recipe["id"],
-                "title": recipe.get("title") or recipe["id"],
-                "description": recipe.get("description") or "",
-                "topics": recipe.get("topics") or [],
-                "pack": recipe.get("_pack"),
-                "supports_filters": "{filters}" in (recipe.get("promql") or ""),
-                "supports_scope": "{scope_join}" in (recipe.get("promql") or "")
-                or "{subscribed_selector}" in (recipe.get("promql") or ""),
-            }
-        )
+        item: dict[str, Any] = {
+            "id": recipe["id"],
+            "title": recipe.get("title") or recipe["id"],
+            "topics": recipe.get("topics") or [],
+            "pack": recipe.get("_pack"),
+            "supports_filters": "{filters}" in (recipe.get("promql") or ""),
+            "supports_scope": "{scope_join}" in (recipe.get("promql") or "")
+            or "{subscribed_selector}" in (recipe.get("promql") or ""),
+        }
+        if detail:
+            item["description"] = recipe.get("description") or ""
+        out.append(item)
     return out
 
 

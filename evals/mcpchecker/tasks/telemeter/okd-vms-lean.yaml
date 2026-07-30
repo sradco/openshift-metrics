@@ -1,0 +1,28 @@
+kind: Task
+apiVersion: mcpchecker/v1alpha2
+metadata:
+  name: "telemeter-okd-vms-lean"
+  difficulty: medium
+  parallel: false
+  runs: 1
+  labels:
+    category: telemeter
+    suite: openshift-metrics
+    toolType: recipes
+  description: |
+    Live Telemeter: answer OKD running VM count via run_recipe (lean path).
+spec:
+  verify:
+    - llmJudge:
+        contains: >
+          the agent uses run_recipe (okd_running_vms or a closely related okd_*
+          recipe), reports a numeric result or empty/zero, and includes the
+          PromQL / query_used in the reply — without dozens of exploratory
+          query_telemeter calls
+  prompt:
+    inline: |
+      Using the openshift-metrics MCP, how many running VMs are on OKD
+      clusters right now? Prefer run_recipe with recipe id okd_running_vms
+      (pack okd). Include the query_used PromQL in your answer.
+      Avoid exploratory list_telemetry_metrics dumps and raw query_telemeter
+      unless the recipe fails.

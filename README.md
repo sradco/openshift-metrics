@@ -175,10 +175,10 @@ Then **restart the openshift-metrics MCP** (or reload the Cursor window).
 | Tool | Purpose |
 |------|---------|
 | `search_metrics` | Search general catalog (+ Telemetry flag) |
-| `list_telemetry_metrics` | Allowlist search |
+| `list_telemetry_metrics` | Allowlist search (slim by default; `detail=true` for full) |
 | `is_telemetry_metric` | Membership check |
 | `describe_metric` | Merge catalog + allowlist metadata |
-| `list_recipes` / `run_recipe` | Named fleet PromQL (example pack + future packs) |
+| `list_recipes` / `run_recipe` | Named fleet PromQL (`fleet`, `cnv`, `okd`, …) |
 | `render_scoped_promql` / `query_scoped_metric` | Scoped sum/count/sum_by for any allowlisted metric |
 | `query_telemeter` | Raw PromQL |
 | `telemeter_auth_status` | Credential/token check (no secrets echoed) |
@@ -188,16 +188,22 @@ Then **restart the openshift-metrics MCP** (or reload the Cursor window).
 Telemeter label values. Use `query_telemeter` only when you need live data
 that recipes / scoped tools cannot express.
 
+`list_recipes` / `list_telemetry_metrics` return **slim** rows by default
+(omit long descriptions; telemetry `limit` defaults to 25). Pass
+`detail=true` when full text is required.
+
 `run_recipe`, `query_scoped_metric`, and `query_telemeter` always return
-`query_used` (the PromQL executed). Agents should include that query in
-user-facing answers.
+`query_used` (the PromQL executed) and `queries_remaining_in_window`.
+Agents should include the query in user-facing answers and stop
+exploring when remaining queries are low.
 
 Before every Telemeter call, PromQL **guardrails** (adapted from
 [rhobs/obs-mcp](https://github.com/rhobs/obs-mcp)) reject blanket regex,
 unrestricted selectors, and enforce a query rate limit. See
 `docs/KNOWN_LIMITATIONS.md` and `.env.example` (`TELEMETER_GUARDRAILS`).
 
-Project agent guidance: `AGENTS.md` and `.cursor/skills/openshift-metrics/SKILL.md`.
+Agent research budget + cohort playbook: `AGENTS.md` and
+`.cursor/skills/openshift-metrics/SKILL.md`.
 
 ## Refresh general metrics from a cluster
 

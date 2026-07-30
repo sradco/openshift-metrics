@@ -67,6 +67,10 @@ Honest status for adopters. Update this when limitations are fixed.
 - Results are truncated (`max_series`, default 50).
 - Prefer `run_recipe`, then `query_scoped_metric`, over unconstrained
   `query_telemeter` for fleet asks.
+- `list_recipes` / `list_telemetry_metrics` default to **slim** listings
+  (`detail=false`; telemetry list `limit=25`) to save agent tokens.
+- Live Telemeter tool responses include `queries_remaining_in_window`
+  (rate-limit headroom). Agents should stop exploring when it is low.
 - **PromQL guardrails** (adapted from
   [rhobs/obs-mcp](https://github.com/rhobs/obs-mcp)) run before every
   Telemeter query:
@@ -75,8 +79,21 @@ Honest status for adopters. Update this when limitations are fixed.
     a metric name
   - `rate-limit` — max queries per window
     (`TELEMETER_GUARDRAIL_MAX_QUERIES`, default 30 / 600s)
+  - `max-range-hours` — range lookback cap (default 48h)
   - `require-non-name-matcher` — **off by default** (obs-mcp enables
     `require-label-matcher`; fleet `sum(metric)` recipes would fail)
   - Cardinality TSDB API checks from obs-mcp are **not** available on
     RHOBS Telemeter
   - Configure via `TELEMETER_GUARDRAILS` (see `.env.example`)
+
+## Observability gaps (common agent traps)
+
+- Host OS **major** version (RHCOS/FCOS 9 vs 10):
+  `mcd_host_os_and_version` is **not** telemetered. Only OS **family**
+  via `label_node_openshift_io_os_id` on
+  `node_role_os_version_machine:cpu_capacity_cores:sum`
+  (recipe `worker_os_id_distribution`).
+- OKD cohorts use `cluster_version{version=~".*-okd-.*"}` and the `okd`
+  recipe pack (no OCM `{scope_join}`).
+- Cluster age recipes use `cluster_version{type="cluster"}` — that is
+  cluster object age, not VM uptime.
