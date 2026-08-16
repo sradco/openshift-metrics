@@ -1,6 +1,5 @@
 import yaml
 import logging
-import string
 logger = logging.getLogger(__name__)
 
 def load_label_descriptions(file_path):

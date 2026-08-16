@@ -2,6 +2,7 @@
 .env
 .env.*
 !.env.example
+mcp.http.local.json
 *.pem
 *.key
 *token*

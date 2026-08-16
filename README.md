@@ -17,7 +17,7 @@ metrics). Join patterns are reusable — copy, swap the metric, or add
 ## Before you start
 
 1. GitHub access to `rhobs/openshift-metrics` (private).
-2. Python 3.10+.
+2. [uv](https://docs.astral.sh/uv/) and Python 3.10+.
 3. For live Telemeter: `PROM_URL` plus RHOBS SA (`CLIENTID` / `CLIENTSECRET`)
    via Slack [#rhobs-support](https://redhat.enterprise.slack.com/archives/C052XEAU63E)
    (credentials only — MCP/recipe bugs → [OWNERS](OWNERS)).
@@ -51,21 +51,25 @@ Use `.env` locally (gitignored). See `.env.example`.
 - General Prometheus metrics metadata (YAML, partial)
 - Telemetry allowlist sync from CMO (+ CI drift check)
 - Fleet PromQL recipes (`knowledge/recipes/fleet.yaml` + optional domain packs)
-- MCP server for Cursor / Claude Code
+- MCP server for Cursor / Claude Code (stdio) and HTTP/container deployments
 - Optional script to refresh general metrics from a cluster Prometheus
 
 ## Installation
 
+Requires [uv](https://docs.astral.sh/uv/) (locked installs). Python 3.10+.
+
 ```bash
 git clone https://github.com/rhobs/openshift-metrics.git
 cd openshift-metrics
-python3 -m venv .venv
-source .venv/bin/activate
-pip install -r requirements.txt
+./scripts/install_mcp.sh          # creates .venv from uv.lock
+# or: make install
+# for tests: ./scripts/install_mcp.sh --dev   # or: make install-dev
 cp .env.example .env   # fill CLIENTID/CLIENTSECRET for live queries
 ```
 
-For development tests: `pip install -r requirements-dev.txt`.
+`pyproject.toml` + `uv.lock` are the source of truth for CI, `install_mcp.sh`,
+and the launcher. After changing dependencies: `uv lock && ./scripts/install_mcp.sh --dev`.
+`requirements.txt` / `requirements-dev.txt` are a human-readable summary only.
 
 ## Sync Telemetry allowlist
 
@@ -90,13 +94,14 @@ If `--check` fails, re-run the sync command and commit the updated
 
 ## MCP server (Cursor / Claude Code) — easy setup
 
-Other users only need **three steps**:
+Other users need **install once**, then point Cursor at the launcher:
 
-### 1. Clone and credentials
+### 1. Clone, install locked deps, credentials
 
 ```bash
 git clone https://github.com/rhobs/openshift-metrics.git
 cd openshift-metrics
+./scripts/install_mcp.sh
 
 # Option A (repo-local, gitignored):
 umask 077
@@ -118,13 +123,16 @@ EOF
 
 Catalog tools work without credentials. Live Telemeter needs `PROM_URL`
 (ask `#rhobs-support`) plus the SA credentials. Do not commit real API
-endpoints. Precedence in `run_mcp.sh`: already-exported env >
-repo `.env` > `~/.config/openshift-metrics/env`.
+endpoints. Precedence (stdio, HTTP, and `python -m mcp_server`):
+already-exported env > repo `.env` >
+`~/.config/openshift-metrics/env`.
 
 ### 2. Point Cursor / Claude Code at the launcher
 
-Copy `mcp.json.example` into your Cursor MCP config (user or project) and
-replace the path:
+**Option A — stdio (simplest local use; recommended for Cursor/Claude desktop)**
+
+Copy `mcp.json.example` into your Cursor / Claude MCP config and replace
+the path:
 
 ```json
 {
@@ -136,9 +144,48 @@ replace the path:
 }
 ```
 
-`scripts/run_mcp.sh` handles venv creation, dependency refresh when
-`requirements.txt` changes, `PYTHONPATH`, and loading `.env` /
-`~/.config/openshift-metrics/env`. No secrets in JSON.
+Cursor or Claude starts the process for you. No separate server to keep
+running.
+
+**Option B — HTTP (shared process / containers)**
+
+HTTP **always** requires `MCP_HTTP_TOKEN` (including loopback), at least
+16 characters. This is a shared secret (`Authorization: Bearer …`), not
+OAuth/SSO. HTTP is **cleartext** — put a TLS gateway in front before
+exposing off-loopback.
+Use path `/mcp` (no trailing slash; `/mcp/` may redirect). `/health` is
+public. Send the Bearer token on **every** MCP HTTP request (POST and GET).
+
+1. Start the server once:
+
+```bash
+export MCP_HTTP_TOKEN=your-shared-secret   # or set it in .env
+./scripts/run_mcp_http.sh
+```
+
+2. Point the client at the URL (`mcp.http.json.example`):
+
+```json
+{
+  "mcpServers": {
+    "openshift-metrics": {
+      "url": "http://127.0.0.1:8000/mcp",
+      "headers": {
+        "Authorization": "Bearer REPLACE_WITH_MCP_HTTP_TOKEN"
+      }
+    }
+  }
+}
+```
+
+Both Cursor and Claude Code support **stdio and HTTP** MCP configs. Use
+stdio for everyday laptop use; use HTTP for a long-lived shared process
+or a container. The container image is not built or tested in CI.
+
+`scripts/run_mcp.sh` / `run_mcp_http.sh` only check `.venv` and start
+`.venv/bin/python -m mcp_server`. Env files are loaded in Python. They
+do **not** run `pip`/`uv sync` on startup. Install or refresh deps with
+`./scripts/install_mcp.sh` when `uv.lock` changes.
 
 ### 3. Restart MCP and ask
 
@@ -153,22 +200,34 @@ local checkout. To get server, recipe, allowlist, and instruction updates:
 ```bash
 cd /ABS/PATH/TO/openshift-metrics
 git pull
+./scripts/install_mcp.sh   # only needed when uv.lock / pyproject changed
 ```
 
 Then **restart the openshift-metrics MCP** (or reload the Cursor window).
 
 - Code, recipes, allowlist, and agent guidance load from the checkout on
   the next MCP start.
-- If `requirements.txt` changed, `scripts/run_mcp.sh` reinstalls deps
-  automatically (stamp under `.venv/`).
 - You usually do **not** need to edit your Cursor MCP JSON unless
   `mcp.json.example` gains new fields (rare).
 
 ### Manual run (optional)
 
 ```bash
-./scripts/run_mcp.sh
+./scripts/install_mcp.sh   # once
+./scripts/run_mcp.sh       # stdio
+# or:
+./scripts/run_mcp_http.sh  # HTTP on :8000/mcp
 ```
+
+### Container (optional)
+
+```bash
+podman build -t openshift-metrics-mcp -f Containerfile .
+podman run --rm -p 8000:8000 --env-file .env \
+  -e MCP_HTTP_TOKEN=your-shared-secret openshift-metrics-mcp
+```
+
+Then use `mcp.http.json.example` against `http://127.0.0.1:8000/mcp`.
 
 ### MCP tools
 
@@ -221,11 +280,11 @@ See `data/label_descriptions.yaml` for label description overrides.
 ## Tests
 
 ```bash
-pip install -r requirements-dev.txt
-PYTHONPATH=src pytest tests/
-python src/sync_telemetry_allowlist.py --check
+./scripts/install_mcp.sh --dev   # or: make install-dev
+make test
+.venv/bin/python src/sync_telemetry_allowlist.py --check
 # Optional live Telemeter (needs credentials):
-PYTHONPATH=src python scripts/smoke_test_mcp.py
+make smoke
 ```
 
 ### Agent evals (mcpchecker)

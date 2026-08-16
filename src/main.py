@@ -1,15 +1,16 @@
 import argparse
 from collections import defaultdict
-import os
-import yaml
-import logging
-import warnings
-from urllib3.exceptions import InsecureRequestWarning
-from prometheus_utils import *
-from helpers import *
-
-
 from concurrent.futures import ThreadPoolExecutor, as_completed
+import logging
+import os
+import string
+import warnings
+
+import yaml
+from urllib3.exceptions import InsecureRequestWarning
+
+from helpers import load_label_descriptions, merge_metrics, save_metrics_to_yaml
+from prometheus_utils import fetch_metric_metadata, fetch_metric_names_by_prefix
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
 logger = logging.getLogger(__name__)
