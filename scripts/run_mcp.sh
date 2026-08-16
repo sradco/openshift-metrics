@@ -1,8 +1,10 @@
 #!/usr/bin/env bash
 # Launch the openshift-metrics MCP server for Cursor / Claude Code (stdio).
 #
-# Does NOT create a venv or run pip/uv sync. Install first:
-#   ./scripts/install_mcp.sh
+# Creates .venv from uv.lock on first start only. Later starts exec
+# Python (no network). Failed uv sync or a failed import check exits
+# non-zero (stderr is not swallowed). If uv.lock drifted, prints a
+# hint to run ./scripts/install_mcp.sh — does not sync in-process.
 #
 # Usage in MCP config (absolute path recommended):
 #   "command": "/path/to/openshift-metrics/scripts/run_mcp.sh"

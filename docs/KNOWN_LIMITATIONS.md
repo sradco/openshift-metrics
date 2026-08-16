@@ -64,10 +64,14 @@ Honest status for adopters. Update this when limitations are fixed.
 
 ## Runtime
 
-- Install with `./scripts/install_mcp.sh` (uv + `uv.lock`) **before**
-  pointing Cursor at `scripts/run_mcp.sh`. The launcher does not
-  `pip install` or `uv sync` on MCP start. Env files are loaded in
-  Python (exported > repo `.env` > XDG), not in the shell launcher.
+- Install [uv](https://docs.astral.sh/uv/), then clone and point Cursor /
+  Claude at `scripts/run_mcp.sh`. The launcher runs `uv sync --frozen`
+  only when `.venv` is missing (first start). A failed sync or a failed
+  import check **exits non-zero** with the command output (nothing is
+  swallowed). Lock drift is not synced on spawn — run
+  `./scripts/install_mcp.sh` from a terminal (`--dev` for pytest). Env
+  files are loaded in Python (exported > repo `.env` > XDG), not in the
+  shell launcher.
 - Transports: **stdio** (default; Cursor/Claude spawn the process) and
   **streamable-http** (`./scripts/run_mcp_http.sh` or Containerfile) for
   URL clients and containers. Both work with Cursor and Claude.

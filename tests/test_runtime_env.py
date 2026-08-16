@@ -50,6 +50,21 @@ def test_env_precedence_exported_beats_dotenv_beats_xdg(tmp_path, monkeypatch):
     assert os.environ["MCP_PORT"] == "9999"
 
 
+def test_missing_dotenv_raises_instead_of_skipping(tmp_path, monkeypatch):
+    import builtins
+
+    real_import = builtins.__import__
+
+    def fake_import(name, *args, **kwargs):
+        if name == "dotenv" or name.startswith("dotenv."):
+            raise ImportError("simulated missing python-dotenv")
+        return real_import(name, *args, **kwargs)
+
+    monkeypatch.setattr(builtins, "__import__", fake_import)
+    with pytest.raises(ImportError, match="python-dotenv is required"):
+        load_runtime_env(tmp_path)
+
+
 def test_load_runtime_env_is_idempotent(tmp_path, monkeypatch):
     repo = tmp_path / "repo"
     monkeypatch.setenv("XDG_CONFIG_HOME", str(tmp_path / "xdg"))

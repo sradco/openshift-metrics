@@ -94,14 +94,18 @@ If `--check` fails, re-run the sync command and commit the updated
 
 ## MCP server (Cursor / Claude Code) — easy setup
 
-Other users need **install once**, then point Cursor at the launcher:
+Other users need **uv** installed, a clone, and an MCP config pointing at
+the launcher. First start creates `.venv`; later `uv.lock` changes are
+refreshed from a terminal with `./scripts/install_mcp.sh`. If install or
+imports fail, the launcher **exits non-zero** and prints the Python
+error plus that command (nothing is swallowed).
 
 ### 1. Clone, install locked deps, credentials
 
 ```bash
 git clone https://github.com/rhobs/openshift-metrics.git
 cd openshift-metrics
-./scripts/install_mcp.sh
+./scripts/install_mcp.sh   # optional; run_mcp.sh also syncs on first start
 
 # Option A (repo-local, gitignored):
 umask 077
@@ -182,10 +186,13 @@ Both Cursor and Claude Code support **stdio and HTTP** MCP configs. Use
 stdio for everyday laptop use; use HTTP for a long-lived shared process
 or a container. The container image is not built or tested in CI.
 
-`scripts/run_mcp.sh` / `run_mcp_http.sh` only check `.venv` and start
-`.venv/bin/python -m mcp_server`. Env files are loaded in Python. They
-do **not** run `pip`/`uv sync` on startup. Install or refresh deps with
-`./scripts/install_mcp.sh` when `uv.lock` changes.
+`scripts/run_mcp.sh` / `run_mcp_http.sh` start
+`.venv/bin/python -m mcp_server`. If `.venv` is missing they run
+`uv sync --frozen` once (first start) and **fail the MCP start** if
+sync or the import check fails (stderr shows `uv` / Python output).
+They do **not** sync when `uv.lock` later changes — run
+`./scripts/install_mcp.sh` from a terminal (use `--dev` for pytest).
+Env files are loaded in Python.
 
 ### 3. Restart MCP and ask
 
@@ -200,20 +207,20 @@ local checkout. To get server, recipe, allowlist, and instruction updates:
 ```bash
 cd /ABS/PATH/TO/openshift-metrics
 git pull
-./scripts/install_mcp.sh   # only needed when uv.lock / pyproject changed
 ```
 
-Then **restart the openshift-metrics MCP** (or reload the Cursor window).
-
-- Code, recipes, allowlist, and agent guidance load from the checkout on
-  the next MCP start.
-- You usually do **not** need to edit your Cursor MCP JSON unless
-  `mcp.json.example` gains new fields (rare).
+Then **restart the openshift-metrics MCP** (or fully quit Claude / reload
+the Cursor window). Code, recipes, and allowlist load on the next start.
+If `uv.lock` changed, the launcher prints a hint: run
+`./scripts/install_mcp.sh` from a terminal (it will not sync inside
+Cursor/Claude). If required packages are missing, start is refused and
+the import traceback is printed. You usually do **not** need to edit MCP
+JSON unless `mcp.json.example` gains new fields (rare).
 
 ### Manual run (optional)
 
 ```bash
-./scripts/install_mcp.sh   # once
+./scripts/install_mcp.sh   # optional; also happens on first run_mcp.sh
 ./scripts/run_mcp.sh       # stdio
 # or:
 ./scripts/run_mcp_http.sh  # HTTP on :8000/mcp
