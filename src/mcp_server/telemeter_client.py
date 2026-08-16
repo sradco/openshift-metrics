@@ -120,7 +120,7 @@ def prometheus_connect():
     except ImportError as exc:
         raise TelemeterConfigError(
             "prometheus-api-client is required for live Telemeter queries. "
-            "Install deps: pip install -r requirements.txt",
+            "Install deps: ./scripts/install_mcp.sh",
             code="DEP_MISSING",
         ) from exc
     url = get_prom_url()

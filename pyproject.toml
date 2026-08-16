@@ -1,0 +1,28 @@
+[project]
+name = "openshift-metrics"
+version = "0.1.0"
+description = "OpenShift metrics catalog and Telemetry (Telemeter) MCP server"
+readme = "README.md"
+requires-python = ">=3.10"
+dependencies = [
+  "PyYAML~=6.0.2",
+  "urllib3~=2.3.0",
+  "requests~=2.32.3",
+  "mcp>=2.0.0,<3",
+  "prometheus-api-client>=0.5.0",
+  "python-dotenv>=1.0.0",
+]
+
+[project.optional-dependencies]
+dev = [
+  "pytest>=7.0.0",
+]
+
+[tool.uv]
+# Dependency project only — sources live under src/ and are launched via
+# PYTHONPATH (see scripts/run_mcp.sh). Do not pip-install at MCP start.
+package = false
+
+[tool.pytest.ini_options]
+pythonpath = ["src"]
+testpaths = ["tests"]

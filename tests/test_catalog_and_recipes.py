@@ -9,6 +9,7 @@ REPO_ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(REPO_ROOT / "src"))
 
 from mcp_server.catalog import (  # noqa: E402
+    clear_catalog_caches,
     describe_metric,
     is_telemetry_metric,
     list_telemetry_metrics,
@@ -23,6 +24,7 @@ from mcp_server.recipes import (  # noqa: E402
 )
 from mcp_server.server import _ensure_query_used, _with_rate_status  # noqa: E402
 
+clear_catalog_caches()
 clear_recipe_cache()
 
 

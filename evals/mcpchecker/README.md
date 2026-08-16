@@ -18,7 +18,8 @@
    export OPENAI_API_KEY="sk-..."
    ```
 
-3. Repo `.venv` / deps via `scripts/run_mcp.sh` (auto-created on first run).
+3. Repo `.venv` via `./scripts/install_mcp.sh` (or `make install`) —
+   `run_mcp.sh` does **not** auto-install on start.
 
 4. **Catalog evals** need no Telemeter credentials.
 5. **Telemeter evals** need `PROM_URL`, `CLIENTID`, `CLIENTSECRET` in `.env`

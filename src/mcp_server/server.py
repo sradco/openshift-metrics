@@ -14,13 +14,11 @@ _REPO_ROOT = _SRC.parent
 if str(_SRC) not in sys.path:
     sys.path.insert(0, str(_SRC))
 
-# Load gitignored .env before reading CLIENTID/CLIENTSECRET.
-try:
-    from dotenv import load_dotenv
+# Load XDG env + repo .env once (exported values win). Launchers do not
+# load env files — that would duplicate this.
+from mcp_server.runtime_env import load_runtime_env
 
-    load_dotenv(_REPO_ROOT / ".env", override=False)
-except ImportError:
-    pass
+load_runtime_env(_REPO_ROOT)
 
 from mcp.server.mcpserver import MCPServer
 
@@ -394,8 +392,103 @@ def telemeter_auth_status() -> str:
     return _json(_with_rate_status(telemeter_client.auth_status()))
 
 
-def main() -> None:
-    mcp.run(transport="stdio")
+@mcp.custom_route("/health", methods=["GET"])
+async def health(_request: Any) -> Any:
+    """Liveness for HTTP/container deployments (not used on stdio)."""
+    from starlette.responses import JSONResponse
+
+    return JSONResponse({"status": "ok", "name": "openshift-metrics"})
+
+
+_TRANSPORTS = ("stdio", "streamable-http")
+
+
+def _parse_http_port(raw: str) -> int:
+    try:
+        port = int(raw)
+    except (TypeError, ValueError) as exc:
+        print(f"invalid HTTP port {raw!r} (--port / MCP_PORT)", file=sys.stderr)
+        raise SystemExit(2) from exc
+    if not (1 <= port <= 65535):
+        print(f"invalid HTTP port {port} (--port / MCP_PORT)", file=sys.stderr)
+        raise SystemExit(2)
+    return port
+
+
+def _run_streamable_http(host: str, port: int, path: str) -> None:
+    import os
+
+    import uvicorn
+
+    from mcp_server.http_auth import (
+        BearerAuthMiddleware,
+        ensure_http_token,
+        is_loopback_host,
+    )
+
+    token = (os.environ.get("MCP_HTTP_TOKEN") or "").strip()
+    try:
+        ensure_http_token(token)
+    except ValueError as exc:
+        print(str(exc), file=sys.stderr)
+        raise SystemExit(2) from exc
+    if not is_loopback_host(host):
+        print(
+            "openshift-metrics: HTTP MCP is cleartext. Put a TLS gateway "
+            f"in front of {host}:{port} before exposing it on a network.",
+            file=sys.stderr,
+        )
+    print(
+        f"openshift-metrics: HTTP MCP on http://{host}:{port}{path}",
+        file=sys.stderr,
+    )
+    print(f"Health: http://{host}:{port}/health", file=sys.stderr)
+
+    app: Any = BearerAuthMiddleware(
+        mcp.streamable_http_app(
+            streamable_http_path=path,
+            host=host,
+        ),
+        token,
+    )
+    config = uvicorn.Config(app, host=host, port=port, log_level="info")
+    uvicorn.Server(config).run()
+
+
+def main(argv: list[str] | None = None) -> None:
+    """Run the MCP server (stdio default; HTTP requires MCP_HTTP_TOKEN)."""
+    import argparse
+    import os
+
+    parser = argparse.ArgumentParser(description="OpenShift metrics MCP server")
+    parser.add_argument(
+        "--transport",
+        choices=_TRANSPORTS,
+        default=os.environ.get("MCP_TRANSPORT", "stdio"),
+        help="MCP transport (default: stdio, or MCP_TRANSPORT)",
+    )
+    parser.add_argument(
+        "--host",
+        default=os.environ.get("MCP_HOST", "127.0.0.1"),
+        help="HTTP bind host (streamable-http only; default 127.0.0.1)",
+    )
+    parser.add_argument(
+        "--port",
+        default=os.environ.get("MCP_PORT", "8000"),
+        help="HTTP bind port (streamable-http only)",
+    )
+    parser.add_argument(
+        "--path",
+        default=os.environ.get("MCP_PATH", "/mcp"),
+        help="HTTP MCP path (streamable-http only; default /mcp)",
+    )
+    args = parser.parse_args(argv)
+
+    if args.transport == "stdio":
+        mcp.run(transport="stdio")
+        return
+
+    _run_streamable_http(args.host, _parse_http_port(args.port), args.path)
 
 
 if __name__ == "__main__":

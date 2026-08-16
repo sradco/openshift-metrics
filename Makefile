@@ -17,6 +17,30 @@ help: ## Show targets
 	@grep -E '^[a-zA-Z_-]+:.*?## ' $(MAKEFILE_LIST) | \
 		awk 'BEGIN {FS = ":.*?## "}; {printf "  %-28s %s\n", $$1, $$2}'
 
+.PHONY: install
+install: ## Create/refresh .venv from uv.lock (runtime deps)
+	./scripts/install_mcp.sh
+
+.PHONY: install-dev
+install-dev: ## Create/refresh .venv from uv.lock (+ pytest)
+	./scripts/install_mcp.sh --dev
+
+.PHONY: lock
+lock: ## Refresh uv.lock from pyproject.toml
+	uv lock
+
+.PHONY: run
+run: ## Run MCP over stdio (Cursor/Claude local launcher)
+	./scripts/run_mcp.sh
+
+.PHONY: run-http
+run-http: ## Run MCP over streamable HTTP (requires MCP_HTTP_TOKEN)
+	./scripts/run_mcp_http.sh
+
+.PHONY: container
+container: ## Build container image (HTTP MCP; requires MCP_HTTP_TOKEN at run)
+	podman build -t openshift-metrics-mcp -f Containerfile .
+
 $(TOOLS_BIN_DIR):
 	mkdir -p $(TOOLS_BIN_DIR)
 
@@ -34,11 +58,16 @@ install-mcpchecker: $(MCPCHECKER) ## Install mcpchecker CLI into ./bin
 
 .PHONY: test
 test: ## Run unit tests
-	PYTHONPATH=src python -m pytest tests/ -q
+	@if [ ! -x "$(ROOT_DIR)/.venv/bin/python" ] || \
+	    ! "$(ROOT_DIR)/.venv/bin/python" -c "import pytest" >/dev/null 2>&1; then \
+	  ./scripts/install_mcp.sh --dev; \
+	fi
+	.venv/bin/python -m pytest tests/ -q
 
 .PHONY: smoke
 smoke: ## Run MCP smoke test (catalog always; Telemeter if .env configured)
-	PYTHONPATH=src python scripts/smoke_test_mcp.py
+	@if [ ! -x "$(ROOT_DIR)/.venv/bin/python" ]; then ./scripts/install_mcp.sh; fi
+	.venv/bin/python scripts/smoke_test_mcp.py
 
 .PHONY: run-mcpchecker-eval
 run-mcpchecker-eval: $(MCPCHECKER) ## Run mcpchecker eval (TASK=… CATEGORY=… EVAL_CONFIG=… RUNS=…)

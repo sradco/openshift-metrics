@@ -64,6 +64,19 @@ Honest status for adopters. Update this when limitations are fixed.
 
 ## Runtime
 
+- Install with `./scripts/install_mcp.sh` (uv + `uv.lock`) **before**
+  pointing Cursor at `scripts/run_mcp.sh`. The launcher does not
+  `pip install` or `uv sync` on MCP start. Env files are loaded in
+  Python (exported > repo `.env` > XDG), not in the shell launcher.
+- Transports: **stdio** (default; Cursor/Claude spawn the process) and
+  **streamable-http** (`./scripts/run_mcp_http.sh` or Containerfile) for
+  URL clients and containers. Both work with Cursor and Claude.
+- HTTP is a shared-secret gate (`MCP_HTTP_TOKEN` / `Authorization: Bearer`,
+  at least 16 characters), not OAuth/SSO. The token is required for **all**
+  HTTP binds, including loopback. Prefer `/mcp` (no trailing slash; `/mcp/`
+  may redirect). `/health` is unauthenticated. HTTP is cleartext — terminate
+  TLS in front before exposing off-loopback. The container image is not built
+  or tested in CI.
 - Results are truncated (`max_series`, default 50).
 - Prefer `run_recipe`, then `query_scoped_metric`, over unconstrained
   `query_telemeter` for fleet asks.

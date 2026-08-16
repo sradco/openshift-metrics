@@ -1,0 +1,10 @@
+{
+  "mcpServers": {
+    "openshift-metrics": {
+      "url": "http://127.0.0.1:8000/mcp",
+      "headers": {
+        "Authorization": "Bearer REPLACE_WITH_MCP_HTTP_TOKEN"
+      }
+    }
+  }
+}

@@ -1,4 +1,6 @@
-# Runtime dependencies for the MCP server and allowlist sync.
+# Human-readable runtime summary only. CI, install_mcp.sh, and the MCP
+# launcher use pyproject.toml + uv.lock (not this file).
+#   uv lock && ./scripts/install_mcp.sh --dev
 # Do NOT list stdlib modules (logging, argparse) — PyPI shims can shadow them.
 PyYAML~=6.0.2
 urllib3~=2.3.0

@@ -2,9 +2,10 @@
 """Smoke-test openshift-metrics MCP tools (catalog always; Telemeter if creds set).
 
 Usage:
-  source .venv/bin/activate
+  ./scripts/install_mcp.sh
   # Live Telemeter needs PROM_URL + CLIENTID + CLIENTSECRET in .env
-  PYTHONPATH=src python scripts/smoke_test_mcp.py
+  make smoke
+  # or: .venv/bin/python scripts/smoke_test_mcp.py
 """
 
 from __future__ import annotations
