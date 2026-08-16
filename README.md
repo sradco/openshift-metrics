@@ -2,7 +2,7 @@
 
 Centralized documentation for OpenShift Prometheus metrics, plus an MCP
 server for catalog lookup and optional live **Telemetry (Telemeter)** queries
-from Cursor or Claude Code.
+from any MCP-compatible client.
 
 **Home:** [rhobs/openshift-metrics](https://github.com/rhobs/openshift-metrics)
 (**private** RHOBS org repo — request GitHub access if you cannot clone).
