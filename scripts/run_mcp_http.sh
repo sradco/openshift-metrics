@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
-# HTTP MCP launcher. Install first: ./scripts/install_mcp.sh
+# HTTP MCP launcher. First start may create .venv (same as run_mcp.sh).
 # Requires MCP_HTTP_TOKEN (enforced in Python). For local Cursor/Claude
-# without a long-lived process, use scripts/run_mcp.sh (stdio) instead.
+# without a long-lived process, use run_mcp.sh (stdio).
 set -euo pipefail
 
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"

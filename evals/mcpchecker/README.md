@@ -18,8 +18,9 @@
    export OPENAI_API_KEY="sk-..."
    ```
 
-3. Repo `.venv` via `./scripts/install_mcp.sh` (or `make install`) —
-   `run_mcp.sh` does **not** auto-install on start.
+3. Repo `.venv`: `./scripts/install_mcp.sh --dev` (or let `run_mcp.sh`
+   create runtime deps on first start; tests still need `--dev`).
+   A failed `uv sync` or import check exits non-zero with the error.
 
 4. **Catalog evals** need no Telemeter credentials.
 5. **Telemeter evals** need `PROM_URL`, `CLIENTID`, `CLIENTSECRET` in `.env`

@@ -1,8 +1,7 @@
 #!/usr/bin/env bash
 # Install (or refresh) the local .venv from the locked dependency set.
-#
-# Prefer this over pip at MCP start time. Run once after clone / when
-# pyproject.toml or uv.lock changes, then point Cursor at run_mcp.sh.
+# The MCP launcher creates .venv on first start only; use this script
+# from a terminal when uv.lock changes or you need pytest (--dev).
 #
 # Usage:
 #   ./scripts/install_mcp.sh           # runtime deps
@@ -10,6 +9,8 @@
 set -euo pipefail
 
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+# shellcheck source=lib/common.sh
+source "${REPO_ROOT}/scripts/lib/common.sh"
 cd "$REPO_ROOT"
 
 DEV=0
@@ -46,9 +47,26 @@ fi
 
 echo "openshift-metrics: syncing .venv from uv.lock (frozen)..." >&2
 if [[ "$DEV" -eq 1 ]]; then
-  uv sync --frozen --extra dev
+  if ! uv sync --frozen --extra dev; then
+    echo "openshift-metrics: uv sync --frozen --extra dev failed (see output above)." >&2
+    exit 1
+  fi
 else
-  uv sync --frozen
+  if ! uv sync --frozen; then
+    echo "openshift-metrics: uv sync --frozen failed (see output above)." >&2
+    exit 1
+  fi
+fi
+write_uv_lock_stamp "$REPO_ROOT"
+
+venv_py="${REPO_ROOT}/.venv/bin/python"
+if [[ ! -x "$venv_py" ]]; then
+  echo "openshift-metrics: uv sync reported success but .venv/bin/python is missing." >&2
+  exit 1
+fi
+if ! verify_runtime_imports "$REPO_ROOT" "$venv_py"; then
+  echo "openshift-metrics: packages synced but the MCP import check failed." >&2
+  exit 1
 fi
 
 echo "openshift-metrics: install complete (.venv ready)." >&2
