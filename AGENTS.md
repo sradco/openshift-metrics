@@ -89,7 +89,9 @@ Use recipe `worker_os_id_distribution` and state the limitation.
    Canonical list of what Telemeter forwards (from CMO).
 
 Only treat a metric as Telemetry if the allowlist (or
-`is_telemetry_metric`) says so.
+`is_telemetry_metric`) says so. Exception: RHOBS may expose a series under
+a different name than CMO — today `ALERTS` → query as `alerts` (see
+`docs/KNOWN_LIMITATIONS.md` and catalog `telemeter_query_name`).
 
 ## Tool preference order
 

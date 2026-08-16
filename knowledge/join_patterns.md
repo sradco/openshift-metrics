@@ -195,8 +195,11 @@ Prefer recipes over ad-hoc joins:
 - `firing_alerts_on_clusters_with_vms` / `okd_firing_alerts_with_vms`
 - `degraded_operators_on_clusters_with_vms`
 
-Use `ALERTS{alertstate="firing",severity=~"critical|warning"}` (allowlisted
-severities) — never blanket `alertname=~".*"`.
+Use `alerts{alertstate="firing",severity=~"critical|warning"}` (allowlisted
+severities) — never blanket `alertname=~".*"`. RHOBS Telemeter exposes the
+series as lowercase `alerts` (with `_id`); the CMO allowlist still lists
+the upstream name `ALERTS`. Do not query uppercase `ALERTS` for fleet
+joins — that only hits a few platform test series without `_id`.
 
 ## Other packs (dashboard harvest)
 
@@ -263,9 +266,10 @@ matching an existing dashboard exactly.
 
 ## Skipped / caution from harvest
 
-- COO panel `alerts{namespace="openshift-observability-operator"}` —
-  Telemetry allowlist exposes `ALERTS` (uppercase). Do not assume the
-  Grafana `alerts` name works on RHOBS Telemeter without verifying.
+- Fleet firing alerts: query lowercase `alerts` on RHOBS Telemeter (not
+  CMO allowlist name `ALERTS`). COO panel
+  `alerts{namespace="openshift-observability-operator"}` is a different
+  in-cluster series — do not confuse with telemetered fleet `alerts`.
 - RHACS `ebs_account_account_type_email_domain_internal` — enrichment
   metric used in Grafana; recipes use `ocm_subscription` instead.
 - Dense per-`_id` tables (`Builds by Cluster`) — prefer account rollups

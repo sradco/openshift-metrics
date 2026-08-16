@@ -74,13 +74,14 @@ recipes:
   - id: okd_firing_alerts_with_vms
     title: Firing critical/warning alerts on OKD clusters with VMs
     description: >
-      Count of firing critical|warning ALERTS series on OKD clusters that
+      Count of firing critical|warning alerts series on OKD clusters that
       also have running VMIs, broken down by alertname and severity.
-      Empty result means no such firing alerts at query time.
+      Empty result means no such firing alerts at query time. Query as
+      lowercase alerts (RHOBS Telemeter); CMO allowlist still names it ALERTS.
     topics: [okd, cnv, vms, alerts, adverse]
     promql: >
       count by (alertname, severity) (
-      ALERTS{alertstate="firing",severity=~"critical|warning"}
+      alerts{alertstate="firing",severity=~"critical|warning"}
       and on (_id) group by (_id) (
       cluster_version{type="current",version=~".*-okd-.*"}
       )

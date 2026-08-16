@@ -272,12 +272,16 @@ def render_scoped_promql(
             "only for known Telemeter enrichment metrics"
         )
 
+    # Use the RHOBS Telemeter series name when it differs from CMO allowlist
+    # (e.g. ALERTS → alerts).
+    query_name = catalog.telemeter_query_name(name)
+
     equals = _parse_label_equals(label_equals)
     by_labels = _parse_by_labels(by)
     if agg == "sum_by" and not by_labels:
         raise ValueError("aggregation=sum_by requires by= (comma-separated labels)")
 
-    selector = _metric_selector(name, equals)
+    selector = _metric_selector(query_name, equals)
     scope_join = _scope_join(scope)
     filters = _filter_joins(ebs_account, email_domain, cluster_id)
 
@@ -310,6 +314,7 @@ def render_scoped_promql(
         )
     return {
         "metric_name": name,
+        "telemeter_query_name": query_name,
         "aggregation": agg,
         "scope": scope,
         "filters": {

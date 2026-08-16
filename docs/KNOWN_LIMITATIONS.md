@@ -97,3 +97,7 @@ Honest status for adopters. Update this when limitations are fixed.
   recipe pack (no OCM `{scope_join}`).
 - Cluster age recipes use `cluster_version{type="cluster"}` — that is
   cluster object age, not VM uptime.
+- Fleet firing alerts: CMO allowlist still lists upstream name `ALERTS`,
+  but RHOBS Telemeter exposes the series as lowercase `alerts` (with
+  `_id`). Recipes and scoped PromQL use `alerts`. Uppercase `ALERTS`
+  only matches a few platform test series without `_id`.

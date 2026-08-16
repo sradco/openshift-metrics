@@ -10,6 +10,26 @@ import yaml
 
 from .paths import PROMETHEUS_METRICS_DIR, TELEMETRY_ALLOWLIST_PATH
 
+# CMO allowlist still lists upstream Prometheus name ALERTS, but RHOBS
+# Telemeter stores/exposes the fleet series as lowercase alerts (with _id).
+# Map both directions so catalog tools and scoped PromQL use the live name.
+TELEMETER_QUERY_NAME_BY_ALLOWLIST: dict[str, str] = {
+    "ALERTS": "alerts",
+}
+ALLOWLIST_NAME_BY_TELEMETER_QUERY: dict[str, str] = {
+    v: k for k, v in TELEMETER_QUERY_NAME_BY_ALLOWLIST.items()
+}
+
+
+def telemeter_query_name(metric_name: str) -> str:
+    """Return the metric name to use in RHOBS Telemeter PromQL."""
+    return TELEMETER_QUERY_NAME_BY_ALLOWLIST.get(metric_name, metric_name)
+
+
+def allowlist_lookup_name(metric_name: str) -> str:
+    """Map a Telemeter query name back to the CMO allowlist metric_name."""
+    return ALLOWLIST_NAME_BY_TELEMETER_QUERY.get(metric_name, metric_name)
+
 
 @lru_cache(maxsize=1)
 def load_general_metrics() -> list[dict[str, Any]]:
@@ -48,16 +68,32 @@ def clear_catalog_caches() -> None:
 
 def _telemetry_match_for_name(metric_name: str) -> dict[str, Any] | None:
     allowlist = load_telemetry_allowlist()
+    names_to_try = [metric_name]
+    alt = allowlist_lookup_name(metric_name)
+    if alt not in names_to_try:
+        names_to_try.append(alt)
+
     exact: dict[str, Any] | None = None
     regex_hit: dict[str, Any] | None = None
-    for entry in allowlist.get("matches") or []:
-        if entry.get("metric_name") == metric_name:
-            exact = entry
+    for want in names_to_try:
+        for entry in allowlist.get("matches") or []:
+            if entry.get("metric_name") == want:
+                exact = dict(entry)
+                break
+            pattern = entry.get("metric_name_regex")
+            if pattern and re.fullmatch(pattern, want):
+                regex_hit = dict(entry)
+        if exact:
             break
-        pattern = entry.get("metric_name_regex")
-        if pattern and re.fullmatch(pattern, metric_name):
-            regex_hit = entry
-    return exact or regex_hit
+    hit = exact or regex_hit
+    if not hit:
+        return None
+    allowlist_name = hit.get("metric_name") or metric_name
+    query_name = telemeter_query_name(allowlist_name)
+    if query_name != allowlist_name:
+        hit["telemeter_query_name"] = query_name
+        hit["allowlist_metric_name"] = allowlist_name
+    return hit
 
 
 def is_telemetry_metric(metric_name: str) -> dict[str, Any]:
@@ -87,6 +123,10 @@ def _slim_telemetry_entry(entry: dict[str, Any]) -> dict[str, Any]:
     if entry.get("selector"):
         # Keep selector — often needed to see label filters — but skip owners.
         out["selector"] = entry.get("selector")
+    allowlist_name = entry.get("metric_name") or ""
+    query_name = telemeter_query_name(allowlist_name)
+    if query_name and query_name != allowlist_name:
+        out["telemeter_query_name"] = query_name
     return out
 
 
@@ -158,22 +198,29 @@ def search_metrics(query: str, limit: int = 25, telemetry_only: bool = False) ->
     if len(results) < limit:
         seen = {r["metric_name"] for r in results}
         for entry in list_telemetry_metrics(query=query, limit=limit):
-            name = entry.get("metric_name") or entry.get("metric_name_regex")
-            if not name or name in seen:
+            allowlist_name = entry.get("metric_name") or entry.get("metric_name_regex")
+            if not allowlist_name:
                 continue
-            results.append(
-                {
-                    "metric_name": name,
-                    "metric_description": entry.get("description"),
-                    "type": None,
-                    "labels": [],
-                    "source_file": "docs/telemetry/allowlist.yaml",
-                    "in_telemetry": True,
-                    "match_type": entry.get("match_type"),
-                    "selector": entry.get("selector"),
-                }
-            )
-            seen.add(name)
+            query_name = telemeter_query_name(allowlist_name)
+            # Prefer the live Telemeter query name in search hits.
+            display_name = query_name
+            if display_name in seen:
+                continue
+            row: dict[str, Any] = {
+                "metric_name": display_name,
+                "metric_description": entry.get("description"),
+                "type": None,
+                "labels": [],
+                "source_file": "docs/telemetry/allowlist.yaml",
+                "in_telemetry": True,
+                "match_type": entry.get("match_type"),
+                "selector": entry.get("selector"),
+            }
+            if query_name != allowlist_name:
+                row["allowlist_metric_name"] = allowlist_name
+                row["telemeter_query_name"] = query_name
+            results.append(row)
+            seen.add(display_name)
             if len(results) >= limit:
                 break
     return results[:limit]
@@ -198,7 +245,15 @@ def describe_metric(metric_name: str) -> dict[str, Any]:
             "labels": general.get("labels") or [],
             "source_file": general.get("_source_file"),
         }
-    if not general and not tel["in_telemetry"]:
+    entry = tel.get("allowlist_entry") or {}
+    query_name = entry.get("telemeter_query_name") or telemeter_query_name(metric_name)
+    if tel["in_telemetry"] and query_name != metric_name:
+        result["telemeter_query_name"] = query_name
+        result["note"] = (
+            f"CMO allowlist lists {entry.get('allowlist_metric_name') or entry.get('metric_name')!r}; "
+            f"query RHOBS Telemeter as {query_name!r}."
+        )
+    elif not general and not tel["in_telemetry"]:
         result["note"] = (
             "Metric not found in general catalog or Telemetry allowlist. "
             "It may still exist on some clusters; catalogs are partial."
@@ -208,9 +263,16 @@ def describe_metric(metric_name: str) -> dict[str, Any]:
             "Present in general metrics catalog but NOT confirmed in Telemetry allowlist."
         )
     elif tel["in_telemetry"] and not general:
-        result["note"] = (
-            "Present in Telemetry allowlist; no entry in general prometheus_metrics catalog."
-        )
+        if query_name != (entry.get("metric_name") or metric_name):
+            result["telemeter_query_name"] = query_name
+            result["note"] = (
+                "Present in Telemetry allowlist; no entry in general "
+                f"prometheus_metrics catalog. Query RHOBS Telemeter as {query_name!r}."
+            )
+        else:
+            result["note"] = (
+                "Present in Telemetry allowlist; no entry in general prometheus_metrics catalog."
+            )
     return result
 
 

@@ -133,8 +133,9 @@ def test_render_worker_os_id_and_adverse_recipes():
     alerts = render_recipe_promql(
         "firing_alerts_on_clusters_with_vms", scope="external"
     )["promql"]
-    assert 'ALERTS{alertstate="firing"' in alerts
+    assert 'alerts{alertstate="firing"' in alerts
     assert "cnv:vmi_status_running:count" in alerts
+    assert "ALERTS{" not in alerts
 
 
 def test_with_rate_status_attaches_remaining():
@@ -145,6 +146,28 @@ def test_with_rate_status_attaches_remaining():
 
 def test_allowlist_contains_platform_metric():
     assert is_telemetry_metric("cluster:capacity_cpu_cores:sum")["in_telemetry"] is True
+
+
+def test_alerts_telemeter_query_name_alias():
+    """CMO allowlist says ALERTS; RHOBS Telemeter series is lowercase alerts."""
+    assert is_telemetry_metric("ALERTS")["in_telemetry"] is True
+    assert is_telemetry_metric("alerts")["in_telemetry"] is True
+    alerts_entry = is_telemetry_metric("alerts")["allowlist_entry"]
+    assert alerts_entry.get("telemeter_query_name") == "alerts"
+    assert alerts_entry.get("allowlist_metric_name") == "ALERTS"
+
+    desc = describe_metric("ALERTS")
+    assert desc["in_telemetry"] is True
+    assert desc.get("telemeter_query_name") == "alerts"
+
+    rendered = render_scoped_promql("ALERTS", aggregation="sum", scope="external")
+    assert rendered["telemeter_query_name"] == "alerts"
+    assert "sum(alerts" in rendered["promql"]
+    assert "ALERTS{" not in rendered["promql"]
+
+    okd = render_recipe_promql("okd_firing_alerts_with_vms")["promql"]
+    assert 'alerts{alertstate="firing"' in okd
+    assert "ALERTS{" not in okd
 
 
 def test_render_cnv_minor_version_recipe():
