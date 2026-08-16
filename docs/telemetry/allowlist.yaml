@@ -587,7 +587,7 @@ matches:
   owners: (@openshift/openshift-team-monitoring)
   metric_name: namespace_job:scrape_samples_post_metric_relabeling:topk3
   match_type: exact
-- selector: '{__name__="collector:node_scrape_collector_success:avg",collector=~"ethtool|cpufreq|tcpstat|netdev|netclass|buddyinfo|mountstats|ksmd|processes|systemd|softirqs|zoneinfo|dmmultipath|nvmesubsystem"}'
+- selector: '{__name__="collector:node_scrape_collector_success:avg",collector=~"ethtool|cpufreq|tcpstat|netdev|netclass|buddyinfo|mountstats|ksmd|processes|systemd|softirqs|zoneinfo|dmmultipath|nvmesubsystem|interrupts"}'
   description: collector:node_scrape_collector_success:avg reports the average success of optional node_exporter's
     collectors running in the cluster.
   owners: (@openshift/openshift-team-monitoring)
@@ -1260,4 +1260,10 @@ matches:
   description: cluster:k8s_mcp_http_requests:sum tracks the total HTTP requests.
   owners: (https://github.com/containers/kubernetes-mcp-server)
   metric_name: cluster:k8s_mcp_http_requests:sum
+  match_type: exact
+- selector: '{__name__="ogx:api_info:max", api=~"agentic|inference|rag|responses|vector_io"}'
+  description: 'ogx:api_info:max tracks which OGX APIs are actively used on the cluster. Expected labels:
+    - api: "agentic", "inference", "rag", "responses" or "vector_io"'
+  owners: (https://github.com/opendatahub-io/ogx-k8s-operator, @openshift/openshift-team-ogx)
+  metric_name: ogx:api_info:max
   match_type: exact
