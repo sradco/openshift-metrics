@@ -132,3 +132,5 @@ for credentials; MCP bugs go to repo OWNERS (not that channel).
 Optional mcpchecker suite: `evals/mcpchecker/` (`make run-mcpchecker-eval`).
 Catalog tasks are offline; Telemeter tasks need credentials and respect
 rate limits. Lean-research / guardrail tasks enforce low `maxToolCalls`.
+`OPENAI_API_KEY` is **evals only** (mcpchecker agent + judge). The MCP
+server does not call an LLM and does not need that key.

@@ -91,4 +91,5 @@ Prefer recipes, then scoped tools. See `docs/KNOWN_LIMITATIONS.md`.
 - Catalog tools work without credentials; live Telemeter needs
   `PROM_URL` / `CLIENTID` / `CLIENTSECRET` (no hardcoded Telemeter URL)
 - Credentials: `#rhobs-support`. MCP bugs: repo OWNERS.
-- Optional agent evals: `make run-mcpchecker-eval` (see `evals/mcpchecker/`)
+- Optional agent evals: `make run-mcpchecker-eval` (see `evals/mcpchecker/`).
+  `OPENAI_API_KEY` is evals-only; the MCP server does not call an LLM.
