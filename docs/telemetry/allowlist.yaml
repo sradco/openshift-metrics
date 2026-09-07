@@ -356,6 +356,18 @@ matches:
   owners: (@openshift/team-ocs-committers)
   metric_name: noobaa_total_usage
   match_type: exact
+- selector: '{__name__="ramen:dr_policy_type:max",dr_type=~"metro|regional|unknown"}'
+  description: 'ramen:dr_policy_type:max tracks the number of DRPolicy resources by disaster recovery
+    type. Labels: * dr_type: "metro", "regional", "unknown".'
+  owners: (https://github.com/RamenDR/ramen)
+  metric_name: ramen:dr_policy_type:max
+  match_type: exact
+- selector: '{__name__="ramen:dr_protected_apps:max",management_method=~"discovered|managed"}'
+  description: 'ramen:dr_protected_apps:max tracks the number of DR-protected applications by management
+    method. Labels: * management_method: "discovered", "managed".'
+  owners: (https://github.com/RamenDR/ramen)
+  metric_name: ramen:dr_protected_apps:max
+  match_type: exact
 - selector: '{__name__="console_url"}'
   description: console_url is the url of the console running on the cluster.
   owners: (@openshift/origin-web-console-committers)
