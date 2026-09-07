@@ -60,7 +60,7 @@ Honest status for adopters. Update this when limitations are fixed.
 - Optional **mcpchecker** agent evals live under `evals/mcpchecker/`
   (catalog tasks need no Telemeter; live suite needs creds). See that
   directory’s README. These are not obs-mcp task copies — different tools
-  and backend.
+  and backend. `OPENAI_API_KEY` is for mcpchecker only, not MCP runtime.
 
 ## Runtime
 

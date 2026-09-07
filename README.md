@@ -2,7 +2,7 @@
 
 Centralized documentation for OpenShift Prometheus metrics, plus an MCP
 server for catalog lookup and optional live **Telemetry (Telemeter)** queries
-from Cursor or Claude Code.
+from any MCP-compatible client (for example Cursor or Claude Code).
 
 **Home:** [rhobs/openshift-metrics](https://github.com/rhobs/openshift-metrics)
 (**private** RHOBS org repo — request GitHub access if you cannot clone).
@@ -18,9 +18,16 @@ metrics). Join patterns are reusable — copy, swap the metric, or add
 
 1. GitHub access to `rhobs/openshift-metrics` (private).
 2. [uv](https://docs.astral.sh/uv/) and Python 3.10+.
-3. For live Telemeter: `PROM_URL` plus RHOBS SA (`CLIENTID` / `CLIENTSECRET`)
+3. An MCP-compatible client to attach the server (stdio or HTTP). The
+   **host agent provides the LLM** — this MCP does not call OpenAI or
+   any other model API. Do **not** set `OPENAI_API_KEY` to run it.
+4. For live Telemeter: `PROM_URL` plus RHOBS SA (`CLIENTID` / `CLIENTSECRET`)
    via Slack [#rhobs-support](https://redhat.enterprise.slack.com/archives/C052XEAU63E)
    (credentials only — MCP/recipe bugs → [OWNERS](OWNERS)).
+
+`OPENAI_API_KEY` is **only** for the optional mcpchecker evals (an
+LLM-as-agent harness). Catalog tools and MCP start do not use it. CI
+does not require it.
 
 ## Two catalogs (important)
 
@@ -40,7 +47,7 @@ customer-sensitive**.
 - Real `ebs_account`, `email_domain`, or cluster `_id` values
 - CSV/HTML reports or query result dumps
 
-**Also never** paste those into public Slack, Jira, or GitHub. Cursor/Claude
+**Also never** paste those into public Slack, Jira, or GitHub. MCP client
 **chat transcripts retain tool output** — treat chats that ran Telemeter
 queries as sensitive.
 
@@ -51,7 +58,7 @@ Use `.env` locally (gitignored). See `.env.example`.
 - General Prometheus metrics metadata (YAML, partial)
 - Telemetry allowlist sync from CMO (+ CI drift check)
 - Fleet PromQL recipes (`knowledge/recipes/fleet.yaml` + optional domain packs)
-- MCP server for Cursor / Claude Code (stdio) and HTTP/container deployments
+- MCP server for any MCP-compatible client (stdio, HTTP, or container)
 - Optional script to refresh general metrics from a cluster Prometheus
 
 ## Installation
@@ -92,7 +99,7 @@ python src/sync_telemetry_allowlist.py --check
 If `--check` fails, re-run the sync command and commit the updated
 `docs/telemetry/allowlist.yaml`.
 
-## MCP server (Cursor / Claude Code) — easy setup
+## MCP server — easy setup
 
 Other users need **uv** installed, a clone, and an MCP config pointing at
 the launcher. First start creates `.venv`; later `uv.lock` changes are
@@ -131,12 +138,12 @@ endpoints. Precedence (stdio, HTTP, and `python -m mcp_server`):
 already-exported env > repo `.env` >
 `~/.config/openshift-metrics/env`.
 
-### 2. Point Cursor / Claude Code at the launcher
+### 2. Point your MCP client at the launcher
 
-**Option A — stdio (simplest local use; recommended for Cursor/Claude desktop)**
+**Option A — stdio (simplest local use; recommended for desktop clients)**
 
-Copy `mcp.json.example` into your Cursor / Claude MCP config and replace
-the path:
+Copy `mcp.json.example` into your client's MCP config (Cursor, Claude
+Code, or any stdio MCP host) and replace the path:
 
 ```json
 {
@@ -148,7 +155,7 @@ the path:
 }
 ```
 
-Cursor or Claude starts the process for you. No separate server to keep
+The client starts the process for you. No separate server to keep
 running.
 
 **Option B — HTTP (shared process / containers)**
@@ -182,9 +189,9 @@ export MCP_HTTP_TOKEN=your-shared-secret   # or set it in .env
 }
 ```
 
-Both Cursor and Claude Code support **stdio and HTTP** MCP configs. Use
-stdio for everyday laptop use; use HTTP for a long-lived shared process
-or a container. The container image is not built or tested in CI.
+Any MCP-compatible client that supports **stdio or HTTP** can attach.
+Use stdio for everyday laptop use; use HTTP for a long-lived shared
+process or a container. The container image is not built or tested in CI.
 
 `scripts/run_mcp.sh` / `run_mcp_http.sh` start
 `.venv/bin/python -m mcp_server`. If `.venv` is missing they run
@@ -196,26 +203,27 @@ Env files are loaded in Python.
 
 ### 3. Restart MCP and ask
 
-Reload Cursor MCP (or the window), then ask e.g. “How many external running
-VMs?” or “Is `cnv:vmi_status_running:count` in Telemetry?”
+Reload the MCP server in your client, then ask e.g. “How many external
+running VMs?” or “Is `cnv:vmi_status_running:count` in Telemetry?”
 
 ### Updating to the latest MCP
 
-Cursor does not pull this repo for you. Your MCP config only points at a
-local checkout. To get server, recipe, allowlist, and instruction updates:
+The MCP client does not pull this repo for you. Your MCP config only
+points at a local checkout. To get server, recipe, allowlist, and
+instruction updates:
 
 ```bash
 cd /ABS/PATH/TO/openshift-metrics
 git pull
 ```
 
-Then **restart the openshift-metrics MCP** (or fully quit Claude / reload
-the Cursor window). Code, recipes, and allowlist load on the next start.
-If `uv.lock` changed, the launcher prints a hint: run
-`./scripts/install_mcp.sh` from a terminal (it will not sync inside
-Cursor/Claude). If required packages are missing, start is refused and
-the import traceback is printed. You usually do **not** need to edit MCP
-JSON unless `mcp.json.example` gains new fields (rare).
+Then **restart the openshift-metrics MCP** in the client. Code, recipes,
+and allowlist load on the next start. If `uv.lock` changed, the launcher
+prints a hint: run `./scripts/install_mcp.sh` from a terminal (it will
+not sync inside a GUI MCP client). If required packages are missing,
+start is refused and the import traceback is printed. You usually do
+**not** need to edit MCP JSON unless `mcp.json.example` gains new fields
+(rare).
 
 ### Manual run (optional)
 
@@ -294,13 +302,19 @@ make test
 make smoke
 ```
 
-### Agent evals (mcpchecker)
+### Agent evals (mcpchecker) — optional; not required to use the MCP
 
-Optional LLM-agent verification (pattern from rhobs/obs-mcp; **custom
-tasks** for this MCP’s tools — not a copy of obs-mcp PromQL tasks):
+The MCP server never calls OpenAI (or any LLM). Using it from an MCP
+client does **not** need `OPENAI_API_KEY`.
+
+`OPENAI_API_KEY` is **only** for this optional harness: mcpchecker
+spawns its **own** LLM agent and judge to exercise the tools (pattern
+from rhobs/obs-mcp; **custom tasks** for this MCP — not a copy of
+obs-mcp PromQL tasks). Skip this section unless you are running those
+evals. CI does not run them.
 
 ```bash
-export OPENAI_API_KEY=...
+export OPENAI_API_KEY=...   # mcpchecker evals only; not used at MCP runtime
 make install-mcpchecker
 make run-mcpchecker-eval                          # catalog + guardrails
 make run-mcpchecker-eval EVAL_CONFIG=eval-telemeter.yaml  # live Telemeter

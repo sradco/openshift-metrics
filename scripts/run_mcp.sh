@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Launch the openshift-metrics MCP server for Cursor / Claude Code (stdio).
+# Launch the openshift-metrics MCP server over stdio (any MCP client).
 #
 # Creates .venv from uv.lock on first start only. Later starts exec
 # Python (no network). Failed uv sync or a failed import check exits

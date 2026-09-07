@@ -30,7 +30,7 @@ lock: ## Refresh uv.lock from pyproject.toml
 	uv lock
 
 .PHONY: run
-run: ## Run MCP over stdio (Cursor/Claude local launcher)
+run: ## Run MCP over stdio (any MCP-compatible client)
 	./scripts/run_mcp.sh
 
 .PHONY: run-http

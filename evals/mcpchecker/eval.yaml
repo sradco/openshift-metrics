@@ -1,5 +1,6 @@
 # Catalog + guardrail evals (no live Telemeter required).
-# Requires: OPENAI_API_KEY (or other agent/judge config), mcpchecker installed.
+# mcpchecker agent + judge only: OPENAI_API_KEY (or other model config).
+# The MCP server does not use this key.
 kind: Eval
 metadata:
   name: "openshift-metrics-catalog"

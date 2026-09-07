@@ -3,6 +3,10 @@
 # Pattern adapted from rhobs/obs-mcp (evals/mcpchecker). Tasks are **not**
 # copies of obs-mcp tasks — tool names and backend (catalog + Telemeter)
 # differ. We reuse the mcpchecker framework and task YAML shape.
+#
+# These evals are optional. The openshift-metrics MCP server does **not**
+# call an LLM. Using the MCP from any MCP-compatible client does **not**
+# require OPENAI_API_KEY. This key is only for mcpchecker's agent + judge.
 
 ## Prerequisites
 
@@ -12,7 +16,8 @@
    make install-mcpchecker
    ```
 
-2. LLM API key for agent + judge (default: OpenAI):
+2. LLM API key for mcpchecker's **agent + judge only** (default: OpenAI).
+   Not used by `run_mcp.sh` / the MCP server:
 
    ```bash
    export OPENAI_API_KEY="sk-..."
